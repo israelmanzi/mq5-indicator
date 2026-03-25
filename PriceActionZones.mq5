@@ -184,6 +184,33 @@ int OnCalculate(const int      rates_total,
    if(rates_total < 100)
       return 0;
 
+   // Throttle: recalculate every 5 seconds to avoid performance issues
+   static datetime lastCalc = 0;
+   if(TimeCurrent() - lastCalc < 5 && prev_calculated > 0)
+      return rates_total;
+   lastCalc = TimeCurrent();
+
+   // Full recalc: reset all accumulated arrays
+   if(prev_calculated <= 0)
+     {
+      g_breakCount        = 0;
+      g_zoneCount         = 0;
+      g_candleSignalCount = 0;
+      g_liqEventCount     = 0;
+      g_eqLevelCount      = 0;
+      g_trendlineCount    = 0;
+      g_keyLevelCount     = 0;
+      g_entryCount        = 0;
+      ArrayResize(g_breaks, 0);
+      ArrayResize(g_zones, 0);
+      ArrayResize(g_candleSignals, 0);
+      ArrayResize(g_liqEvents, 0);
+      ArrayResize(g_eqLevels, 0);
+      ArrayResize(g_trendlines, 0);
+      ArrayResize(g_keyLevels, 0);
+      ArrayResize(g_entries, 0);
+     }
+
    // 1. Load MTF data
    if(!MTFLoadAll(g_rates, 100))
       return prev_calculated; // wait for data
