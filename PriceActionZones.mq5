@@ -18,6 +18,7 @@
 #include "Include/PAZ/Liquidity.mqh"
 #include "Include/PAZ/Trendlines.mqh"
 #include "Include/PAZ/KeyLevels.mqh"
+#include "Include/PAZ/EntrySignals.mqh"
 
 //=============================================================================
 // Global state
@@ -180,8 +181,27 @@ int OnCalculate(const int      rates_total,
    UpdateAllTrendlines(g_structure, g_rates, g_trendlines, g_trendlineCount);
    // 9. Detect key levels (all TFs)
    DetectKeyLevels(g_structure, tolerance * 5, g_keyLevels, g_keyLevelCount);
-   // TODO Task 9: detect liquidity sweeps (g_liqEvents[])
-   // TODO Task 10: build entry signals (g_entries[])
+   // 10. Generate entry signals (checklist)
+   double currentPrice = close[rates_total - 1];
+   double spread_val   = (double)SymbolInfoInteger(_Symbol, SYMBOL_SPREAD);
+   GenerateEntrySignals(g_structure, g_zones, g_zoneCount,
+                        g_liqEvents, g_liqEventCount,
+                        g_breaks, g_breakCount,
+                        g_candleSignals, g_candleSignalCount,
+                        g_keyLevels, g_keyLevelCount,
+                        g_rates, g_entries, g_entryCount,
+                        currentPrice, spread_val);
+
+   // 10b. Generate pattern entries (double top/bottom, breakout+retest)
+   GeneratePatternEntries(g_structure, g_zones, g_zoneCount,
+                          g_trendlines, g_trendlineCount,
+                          g_candleSignals, g_candleSignalCount,
+                          g_keyLevels, g_keyLevelCount,
+                          g_rates, g_breaks, g_breakCount,
+                          g_liqEvents, g_liqEventCount,
+                          g_entries, g_entryCount,
+                          currentPrice, spread_val);
+
    // TODO Task 11: draw all chart objects
    // TODO Task 12: update dashboard
    // TODO Task 13: fire alerts
