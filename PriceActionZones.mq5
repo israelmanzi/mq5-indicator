@@ -20,6 +20,7 @@
 #include "Include/PAZ/KeyLevels.mqh"
 #include "Include/PAZ/EntrySignals.mqh"
 #include "Include/PAZ/TradeManagement.mqh"
+#include "Include/PAZ/Drawing.mqh"
 
 //=============================================================================
 // Global state
@@ -208,8 +209,16 @@ int OnCalculate(const int      rates_total,
    UpdateTradeManagement(g_trade, currentPrice, g_structure[3],
                          g_entries, g_entryCount, trailBuffer);
 
-   // TODO Task 12: draw all chart objects
-   // TODO Task 12: update dashboard
+   // 12. Draw everything
+   DrawAll(g_zones, g_zoneCount,
+           g_breaks, g_breakCount,
+           g_trendlines, g_trendlineCount,
+           g_candleSignals, g_candleSignalCount,
+           g_liqEvents, g_liqEventCount,
+           g_eqLevels, g_eqLevelCount,
+           g_keyLevels, g_keyLevelCount,
+           g_entries, g_entryCount,
+           g_trade);
    // TODO Task 13: fire alerts
 
    return rates_total;
