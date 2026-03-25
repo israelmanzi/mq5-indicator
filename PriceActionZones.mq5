@@ -1,5 +1,5 @@
 //+------------------------------------------------------------------+
-//|                                          PriceActionZones.mq5   |
+//|                                          PriceActionZones.mq5    |
 //|                    Pure price action multi-timeframe indicator   |
 //+------------------------------------------------------------------+
 #property indicator_chart_window
@@ -16,6 +16,7 @@
 #include "Include/PAZ/ZoneBuilder.mqh"
 #include "Include/PAZ/CandlePatterns.mqh"
 #include "Include/PAZ/Liquidity.mqh"
+#include "Include/PAZ/Trendlines.mqh"
 
 //=============================================================================
 // Global state
@@ -174,8 +175,9 @@ int OnCalculate(const int      rates_total,
    // 7. Detect liquidity events (H1, M15)
    UpdateLiquidity(g_rates, g_structure, g_eqLevels, g_eqLevelCount,
                    g_liqEvents, g_liqEventCount, tolerance);
-   // TODO Task 7: detect trendlines (g_trendlines[])
-   // TODO Task 8: detect key levels and equal highs/lows
+   // 8. Build trendlines (H4, H1)
+   UpdateAllTrendlines(g_structure, g_rates, g_trendlines, g_trendlineCount);
+   // TODO Task 9: detect key levels and equal highs/lows
    // TODO Task 9: detect liquidity sweeps (g_liqEvents[])
    // TODO Task 10: build entry signals (g_entries[])
    // TODO Task 11: draw all chart objects
