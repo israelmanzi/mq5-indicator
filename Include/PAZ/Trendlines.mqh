@@ -50,15 +50,6 @@ void BuildTrendlines(const StructureState &state,
 
    int periodSeconds = PeriodSeconds(tf);
 
-   //--- Helper: check if a trendline already exists in the array
-#define TL_EXISTS(asc, ts, te) \
-   ({ bool _found = false; \
-      for(int _k = 0; _k < lineCount && !_found; _k++) \
-         if(lines[_k].tf == tf && lines[_k].isAscending == (asc) && \
-            lines[_k].startTime == (ts) && lines[_k].endTime == (te)) \
-            _found = true; \
-      _found; })
-
    //--------------------------------------------------------------------------
    // Ascending trendline: find two swing lows (newest first) where the older
    // swing low has a LOWER price than the newer one  → higher-low sequence.

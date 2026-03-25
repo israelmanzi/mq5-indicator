@@ -813,63 +813,63 @@ void GeneratePatternEntries(const StructureState  &structure[],
                      sl = retestLevel + buffer;
 
                   double tp = CalcTP(dir, currentPrice, zones, zoneCount, keyLevels, keyLevelCount);
-                  if(tp == 0.0)
-                     return;
-
-                  double risk   = MathAbs(currentPrice - sl);
-                  double reward = MathAbs(tp - currentPrice);
-                  if(risk > 0.0)
+                  if(tp != 0.0)
                     {
-                     double rr = reward / risk;
-                     if(InpMinRR <= 0.0 || rr >= InpMinRR)
+                     double risk   = MathAbs(currentPrice - sl);
+                     double reward = MathAbs(tp - currentPrice);
+                     if(risk > 0.0)
                        {
-                        // Dedup
-                        bool dup = false;
-                        for(int i = 0; i < entryCount; i++)
+                        double rr = reward / risk;
+                        if(InpMinRR <= 0.0 || rr >= InpMinRR)
                           {
-                           if(entries[i].signalTime >= oneHourAgo &&
-                              entries[i].entryType == ENTRY_BREAKOUT_RETEST &&
-                              entries[i].direction == dir)
+                           // Dedup
+                           bool dup = false;
+                           for(int i = 0; i < entryCount; i++)
                              {
-                              dup = true;
-                              break;
+                              if(entries[i].signalTime >= oneHourAgo &&
+                                 entries[i].entryType == ENTRY_BREAKOUT_RETEST &&
+                                 entries[i].direction == dir)
+                                {
+                                 dup = true;
+                                 break;
+                                }
                              }
-                          }
 
-                        if(!dup)
-                          {
-                           string detail = StringFormat("BkRetest: %s retest=%.5f RR=%.1f",
-                                                        (dir == ENTRY_BUY) ? "BUY" : "SELL",
-                                                        retestLevel, rr);
+                           if(!dup)
+                             {
+                              string detail = StringFormat("BkRetest: %s retest=%.5f RR=%.1f",
+                                                           (dir == ENTRY_BUY) ? "BUY" : "SELL",
+                                                           retestLevel, rr);
 
-                           int idx = entryCount;
-                           ArrayResize(entries, idx + 1);
+                              int idx = entryCount;
+                              ArrayResize(entries, idx + 1);
 
-                           entries[idx].entryType       = ENTRY_BREAKOUT_RETEST;
-                           entries[idx].direction        = dir;
-                           entries[idx].entryPrice       = currentPrice;
-                           entries[idx].slPrice          = sl;
-                           entries[idx].tpPrice          = tp;
-                           entries[idx].rrRatio          = rr;
-                           entries[idx].signalTime       = TimeCurrent();
-                           entries[idx].confirmTime      = TimeCurrent();
-                           entries[idx].isConfirmed      = true;
-                           entries[idx].confirmPattern   = PATTERN_NONE;
-                           entries[idx].checklistScore   = 4;
-                           entries[idx].checklistDetail  = detail;
-                           entries[idx].entryTF          = PERIOD_M15;
-                           entries[idx].triggerZoneIdx   = -1;
-                           entries[idx].objNameEntry     = "";
-                           entries[idx].objNameSL        = "";
-                           entries[idx].objNameTP        = "";
-                           entryCount++;
+                              entries[idx].entryType       = ENTRY_BREAKOUT_RETEST;
+                              entries[idx].direction        = dir;
+                              entries[idx].entryPrice       = currentPrice;
+                              entries[idx].slPrice          = sl;
+                              entries[idx].tpPrice          = tp;
+                              entries[idx].rrRatio          = rr;
+                              entries[idx].signalTime       = TimeCurrent();
+                              entries[idx].confirmTime      = TimeCurrent();
+                              entries[idx].isConfirmed      = true;
+                              entries[idx].confirmPattern   = PATTERN_NONE;
+                              entries[idx].checklistScore   = 4;
+                              entries[idx].checklistDetail  = detail;
+                              entries[idx].entryTF          = PERIOD_M15;
+                              entries[idx].triggerZoneIdx   = -1;
+                              entries[idx].objNameEntry     = "";
+                              entries[idx].objNameSL        = "";
+                              entries[idx].objNameTP        = "";
+                              entryCount++;
 
-                           Print("PAZ ENTRY: BreakoutRetest ",
-                                 (dir == ENTRY_BUY) ? "BUY" : "SELL",
-                                 " @ ", DoubleToString(currentPrice, _Digits),
-                                 " SL=", DoubleToString(sl, _Digits),
-                                 " TP=", DoubleToString(tp, _Digits),
-                                 " RR=", DoubleToString(rr, 1));
+                              Print("PAZ ENTRY: BreakoutRetest ",
+                                    (dir == ENTRY_BUY) ? "BUY" : "SELL",
+                                    " @ ", DoubleToString(currentPrice, _Digits),
+                                    " SL=", DoubleToString(sl, _Digits),
+                                    " TP=", DoubleToString(tp, _Digits),
+                                    " RR=", DoubleToString(rr, 1));
+                             }
                           }
                        }
                     }

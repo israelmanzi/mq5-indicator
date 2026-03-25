@@ -144,10 +144,35 @@ void DrawArrow(string name, datetime time, double price,
   }
 
 //=============================================================================
+// Cleanup helper: delete stale objects with indices >= currentCount
+//=============================================================================
+void CleanupStaleObjects(string prefix, int currentCount)
+  {
+   // Delete objects with indices >= currentCount
+   for(int i = currentCount; i < currentCount + 50; i++)
+     {
+      string name = StringFormat("%s%d", prefix, i);
+      if(ObjectFind(0, name) >= 0) ObjectDelete(0, name);
+      // Also try sub-objects (labels, refined zones)
+      string sub1 = name + "_lbl";
+      if(ObjectFind(0, sub1) >= 0) ObjectDelete(0, sub1);
+      string sub2 = name + "_ref";
+      if(ObjectFind(0, sub2) >= 0) ObjectDelete(0, sub2);
+      string sub3 = name + "_steep";
+      if(ObjectFind(0, sub3) >= 0) ObjectDelete(0, sub3);
+      string sub4 = name + "_sl";
+      if(ObjectFind(0, sub4) >= 0) ObjectDelete(0, sub4);
+      string sub5 = name + "_tp";
+      if(ObjectFind(0, sub5) >= 0) ObjectDelete(0, sub5);
+     }
+  }
+
+//=============================================================================
 // 6. DrawZones
 //=============================================================================
 void DrawZones(PriceZone &zones[], int zoneCount)
   {
+   CleanupStaleObjects(OBJ_PREFIX + "Zone_", zoneCount);
    datetime rightEdge = TimeCurrent() + 5 * PeriodSeconds(PERIOD_D1);
 
    for(int i = 0; i < zoneCount; i++)
@@ -221,6 +246,8 @@ void DrawZones(PriceZone &zones[], int zoneCount)
 //=============================================================================
 void DrawStructureBreaks(const StructureBreak &breaks[], int breakCount)
   {
+   CleanupStaleObjects(OBJ_PREFIX + "BRK_", breakCount);
+
    if(!InpShowM15BOS)
       return;
 
@@ -269,6 +296,8 @@ void DrawStructureBreaks(const StructureBreak &breaks[], int breakCount)
 //=============================================================================
 void DrawTrendlines(TrendLine &lines[], int lineCount)
   {
+   CleanupStaleObjects(OBJ_PREFIX + "TL_", lineCount);
+
    for(int i = 0; i < lineCount; i++)
      {
       // Color by steepness
@@ -317,6 +346,8 @@ void DrawTrendlines(TrendLine &lines[], int lineCount)
 //=============================================================================
 void DrawCandlePatterns(const CandleSignal &signals[], int signalCount)
   {
+   CleanupStaleObjects(OBJ_PREFIX + "CP_", signalCount);
+
    for(int i = 0; i < signalCount; i++)
      {
       // Only draw signals at key levels
@@ -340,6 +371,8 @@ void DrawCandlePatterns(const CandleSignal &signals[], int signalCount)
 //=============================================================================
 void DrawLiquidityEvents(const LiquidityEvent &events[], int eventCount)
   {
+   CleanupStaleObjects(OBJ_PREFIX + "LIQ_", eventCount);
+
    for(int i = 0; i < eventCount; i++)
      {
       string baseName = OBJ_PREFIX + "LIQ_" + IntegerToString(i);
@@ -360,6 +393,8 @@ void DrawLiquidityEvents(const LiquidityEvent &events[], int eventCount)
 //=============================================================================
 void DrawEqualLevels(const EqualLevel &levels[], int levelCount)
   {
+   CleanupStaleObjects(OBJ_PREFIX + "EQ_", levelCount);
+
    for(int i = 0; i < levelCount; i++)
      {
       string baseName = OBJ_PREFIX + "EQ_" + IntegerToString(i);
@@ -380,6 +415,8 @@ void DrawEqualLevels(const EqualLevel &levels[], int levelCount)
 //=============================================================================
 void DrawKeyLevels(const KeyLevel &levels[], int levelCount)
   {
+   CleanupStaleObjects(OBJ_PREFIX + "KL_", levelCount);
+
    for(int i = 0; i < levelCount; i++)
      {
       string name = OBJ_PREFIX + "KL_" + IntegerToString(i);
@@ -392,6 +429,8 @@ void DrawKeyLevels(const KeyLevel &levels[], int levelCount)
 //=============================================================================
 void DrawEntrySignals(EntrySignal &entries[], int entryCount)
   {
+   CleanupStaleObjects(OBJ_PREFIX + "ENT_", entryCount);
+
    if(!InpAlertVisual)
       return;
 

@@ -263,32 +263,32 @@ void DetectCandlePatterns(const MqlRates      &rates[],
    if(total < 4)
       return;
 
-   // Scan bars [1 .. min(total-1, 50)], skipping bar 0 (currently forming)
-   int scanEnd = MathMin(total - 1, 50);
+   // CopyRates returns index 0 = oldest, index total-1 = newest (forming bar).
+   // Scan from total-2 (last closed bar) backwards to cover up to 50 bars.
+   int scanStart = total - 2;
+   int scanEnd   = MathMax(3, total - 51);
 
-   for(int i = 1; i <= scanEnd; i++)
+   for(int i = scanStart; i >= scanEnd; i--)
      {
-      // Indices relative to rates[]
-      // rates[0] = most recent closed bar, rates[i] = older bar
-      // For pattern detection we need the bar at position i and its neighbours.
-      // "curr" = rates[i], "prev" = rates[i+1] (one bar older)
+      // "curr" = rates[i], "prev" = rates[i-1] (one bar older)
+      // For 3-bar patterns: first=rates[i-2], second=rates[i-1], third=rates[i]
 
-      // Ensure we have enough history for 3-candle patterns
-      bool have2 = (i + 1 < total);
-      bool have3 = (i + 2 < total);
+      // Ensure we have enough history for multi-candle patterns
+      bool have2 = (i - 1 >= 0);
+      bool have3 = (i - 2 >= 0);
 
       ENUM_CANDLE_PATTERN detected = PATTERN_NONE;
       double              signalPrice = rates[i].high; // default label at bar high
 
       // Average body using the 10 bars ending at this bar
-      double avgBody = AvgBodySize(rates, i + 9 < total ? i + 9 : total - 1, 10);
+      double avgBody = AvgBodySize(rates, i, 10);
 
       // ---- Tier 1: Multi-candle reversal patterns ----
 
-      // Morning Star (3 candles: first=i+2, second=i+1, third=i)
+      // Morning Star (3 candles: first=i-2, second=i-1, third=i)
       if(detected == PATTERN_NONE && have3)
         {
-         if(IsMorningStar(rates[i + 2], rates[i + 1], rates[i], avgBody))
+         if(IsMorningStar(rates[i - 2], rates[i - 1], rates[i], avgBody))
            {
             if(IsAtKeyLevel(rates[i].low, zones, zoneCount, structure, priceTolerance))
               {
@@ -298,10 +298,10 @@ void DetectCandlePatterns(const MqlRates      &rates[],
            }
         }
 
-      // Evening Star (3 candles: first=i+2, second=i+1, third=i)
+      // Evening Star (3 candles: first=i-2, second=i-1, third=i)
       if(detected == PATTERN_NONE && have3)
         {
-         if(IsEveningStar(rates[i + 2], rates[i + 1], rates[i], avgBody))
+         if(IsEveningStar(rates[i - 2], rates[i - 1], rates[i], avgBody))
            {
             if(IsAtKeyLevel(rates[i].high, zones, zoneCount, structure, priceTolerance))
               {
@@ -314,7 +314,7 @@ void DetectCandlePatterns(const MqlRates      &rates[],
       // Three White Soldiers
       if(detected == PATTERN_NONE && have3)
         {
-         if(IsThreeWhiteSoldiers(rates[i + 2], rates[i + 1], rates[i], avgBody))
+         if(IsThreeWhiteSoldiers(rates[i - 2], rates[i - 1], rates[i], avgBody))
            {
             if(IsAtKeyLevel(rates[i].close, zones, zoneCount, structure, priceTolerance))
               {
@@ -327,7 +327,7 @@ void DetectCandlePatterns(const MqlRates      &rates[],
       // Three Black Crows
       if(detected == PATTERN_NONE && have3)
         {
-         if(IsThreeBlackCrows(rates[i + 2], rates[i + 1], rates[i], avgBody))
+         if(IsThreeBlackCrows(rates[i - 2], rates[i - 1], rates[i], avgBody))
            {
             if(IsAtKeyLevel(rates[i].close, zones, zoneCount, structure, priceTolerance))
               {
@@ -342,7 +342,7 @@ void DetectCandlePatterns(const MqlRates      &rates[],
       // Bullish Engulfing
       if(detected == PATTERN_NONE && have2)
         {
-         if(IsBullishEngulfing(rates[i + 1], rates[i]))
+         if(IsBullishEngulfing(rates[i - 1], rates[i]))
            {
             if(IsAtKeyLevel(rates[i].low, zones, zoneCount, structure, priceTolerance))
               {
@@ -355,7 +355,7 @@ void DetectCandlePatterns(const MqlRates      &rates[],
       // Bearish Engulfing
       if(detected == PATTERN_NONE && have2)
         {
-         if(IsBearishEngulfing(rates[i + 1], rates[i]))
+         if(IsBearishEngulfing(rates[i - 1], rates[i]))
            {
             if(IsAtKeyLevel(rates[i].high, zones, zoneCount, structure, priceTolerance))
               {
@@ -368,7 +368,7 @@ void DetectCandlePatterns(const MqlRates      &rates[],
       // Tweezer Top
       if(detected == PATTERN_NONE && have2)
         {
-         if(IsTweezerTop(rates[i + 1], rates[i], priceTolerance))
+         if(IsTweezerTop(rates[i - 1], rates[i], priceTolerance))
            {
             if(IsAtKeyLevel(rates[i].high, zones, zoneCount, structure, priceTolerance))
               {
@@ -381,7 +381,7 @@ void DetectCandlePatterns(const MqlRates      &rates[],
       // Tweezer Bottom
       if(detected == PATTERN_NONE && have2)
         {
-         if(IsTweezerBottom(rates[i + 1], rates[i], priceTolerance))
+         if(IsTweezerBottom(rates[i - 1], rates[i], priceTolerance))
            {
             if(IsAtKeyLevel(rates[i].low, zones, zoneCount, structure, priceTolerance))
               {
@@ -394,7 +394,7 @@ void DetectCandlePatterns(const MqlRates      &rates[],
       // Inside Bar
       if(detected == PATTERN_NONE && have2)
         {
-         if(IsInsideBar(rates[i + 1], rates[i]))
+         if(IsInsideBar(rates[i - 1], rates[i]))
            {
             if(IsAtKeyLevel((rates[i].high + rates[i].low) * 0.5, zones, zoneCount, structure, priceTolerance))
               {

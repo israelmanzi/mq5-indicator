@@ -56,8 +56,8 @@ void DetectKeyLevels(const StructureState &structure[], double tolerance,
                if(curTF != levels[k].primaryTF)
                  {
                   levels[k].tfCount++;
-                  //--- Promote primaryTF to higher timeframe (lower index = higher TF)
-                  if(tf < ArrayBsearch(TF_LIST, levels[k].primaryTF))
+                  //--- Promote primaryTF to higher timeframe
+                  if(PeriodSeconds(curTF) > PeriodSeconds(levels[k].primaryTF))
                      levels[k].primaryTF = curTF;
                  }
 

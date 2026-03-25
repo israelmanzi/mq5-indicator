@@ -290,13 +290,13 @@ void UpdateZoneMitigation(PriceZone &zones[], int &zoneCount,
 // UpdateZoneFading
 // Active zones older than InpZoneFadeBars are set to ZONE_FADED.
 //=============================================================================
-void UpdateZoneFading(PriceZone &zones[], int zoneCount, int currentBarIndex)
+void UpdateZoneFading(PriceZone &zones[], int zoneCount)
   {
    for(int i = 0; i < zoneCount; i++)
      {
       if(zones[i].state != ZONE_ACTIVE)
          continue;
-      if((currentBarIndex - zones[i].barCreated) > InpZoneFadeBars)
+      if(TimeCurrent() - zones[i].timeCreated > InpZoneFadeBars * PeriodSeconds(zones[i].tf))
          zones[i].state = ZONE_FADED;
      }
   }
@@ -596,13 +596,8 @@ void UpdateAllZones(const MTFRates &rates[], PriceZone &zones[], int &zoneCount,
         }
      }
 
-   //--- Update fading for all zones
-   // Use H1 bar index as a reasonable reference for bar age
-   if(rates[2].count > 2)
-     {
-      int currentBar = rates[2].count - 2;
-      UpdateZoneFading(zones, zoneCount, currentBar);
-     }
+   //--- Update fading for all zones (time-based)
+   UpdateZoneFading(zones, zoneCount);
 
    //--- Cleanup mitigated/faded zones for each TF
    for(int i = 0; i < 3; i++)
