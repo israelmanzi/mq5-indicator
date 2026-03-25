@@ -12,6 +12,7 @@
 #include "Include/PAZ/Inputs.mqh"
 #include "Include/PAZ/MTFData.mqh"
 #include "Include/PAZ/SwingPoints.mqh"
+#include "Include/PAZ/MarketStructure.mqh"
 
 //=============================================================================
 // Global state
@@ -151,7 +152,8 @@ int OnCalculate(const int      rates_total,
       return prev_calculated; // wait for data
    // 2. Detect swing points (all TFs)
    DetectAllSwingPoints(g_rates, g_structure);
-   // TODO Task 4: detect BOS / CHoCH, populate g_breaks[]
+   // 3. Determine market structure + BOS/CHoCH (all TFs)
+   UpdateAllStructure(g_rates, g_structure, g_breaks, g_breakCount);
    // TODO Task 5: identify and score supply/demand zones (g_zones[])
    // TODO Task 6: detect trendlines (g_trendlines[])
    // TODO Task 7: detect key levels and equal highs/lows
