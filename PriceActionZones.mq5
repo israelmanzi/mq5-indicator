@@ -17,6 +17,7 @@
 #include "Include/PAZ/CandlePatterns.mqh"
 #include "Include/PAZ/Liquidity.mqh"
 #include "Include/PAZ/Trendlines.mqh"
+#include "Include/PAZ/KeyLevels.mqh"
 
 //=============================================================================
 // Global state
@@ -177,7 +178,8 @@ int OnCalculate(const int      rates_total,
                    g_liqEvents, g_liqEventCount, tolerance);
    // 8. Build trendlines (H4, H1)
    UpdateAllTrendlines(g_structure, g_rates, g_trendlines, g_trendlineCount);
-   // TODO Task 9: detect key levels and equal highs/lows
+   // 9. Detect key levels (all TFs)
+   DetectKeyLevels(g_structure, tolerance * 5, g_keyLevels, g_keyLevelCount);
    // TODO Task 9: detect liquidity sweeps (g_liqEvents[])
    // TODO Task 10: build entry signals (g_entries[])
    // TODO Task 11: draw all chart objects
