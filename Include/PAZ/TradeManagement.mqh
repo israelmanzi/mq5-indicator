@@ -96,7 +96,7 @@ void TrailSLToSwings(TradeState &trade, const StructureState &m15State, double b
 
       for(int i = 0; i < count; i++)
         {
-         const SwingPoint &sp = m15State.swings[i];
+         SwingPoint sp = m15State.swings[i];
          if(sp.type == SWING_LOW && sp.time > trade.entryTime)
            {
             if(bestTime == 0 || sp.time > bestTime)
@@ -125,7 +125,7 @@ void TrailSLToSwings(TradeState &trade, const StructureState &m15State, double b
 
       for(int i = 0; i < count; i++)
         {
-         const SwingPoint &sp = m15State.swings[i];
+         SwingPoint sp = m15State.swings[i];
          if(sp.type == SWING_HIGH && sp.time > trade.entryTime)
            {
             if(bestTime == 0 || sp.time > bestTime)

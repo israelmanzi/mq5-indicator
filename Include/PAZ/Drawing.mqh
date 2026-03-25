@@ -257,8 +257,8 @@ void DrawStructureBreaks(const StructureBreak &breaks[], int breakCount)
       if(breaks[i].tf != PERIOD_M15)
          continue;
 
-      color  clr;
-      string typeStr;
+      color  clr = CLR_DASH_TEXT;
+      string typeStr = "";
 
       switch(breaks[i].breakType)
         {

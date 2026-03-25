@@ -61,7 +61,9 @@ void DetectStructureBreaks(const MqlRates      &rates[],
 
    // Resolve last swing high and last swing low
    SwingPoint lastHigh;
+   ZeroMemory(lastHigh);
    SwingPoint lastLow;
+   ZeroMemory(lastLow);
    bool foundHigh = false;
    bool foundLow  = false;
 

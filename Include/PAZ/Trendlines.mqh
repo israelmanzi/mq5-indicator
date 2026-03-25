@@ -243,7 +243,7 @@ void UpdateTrendlineStates(TrendLine        &lines[],
 // Computes the average bar range (high - low) over the last `lookback` bars
 // of the supplied rates array (excludes the still-forming current bar).
 //=============================================================================
-static double CalcAvgRange(const MqlRates &rates[], int count, int lookback)
+double CalcAvgRange(const MqlRates &rates[], int count, int lookback)
   {
    if(count < 2)
       return _Point;
