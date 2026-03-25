@@ -11,6 +11,7 @@
 #include "Include/PAZ/Structures.mqh"
 #include "Include/PAZ/Inputs.mqh"
 #include "Include/PAZ/MTFData.mqh"
+#include "Include/PAZ/SwingPoints.mqh"
 
 //=============================================================================
 // Global state
@@ -148,7 +149,8 @@ int OnCalculate(const int      rates_total,
    // 1. Load MTF data
    if(!MTFLoadAll(g_rates, 100))
       return prev_calculated; // wait for data
-   // TODO Task 3: detect swing points and update g_structure[]
+   // 2. Detect swing points (all TFs)
+   DetectAllSwingPoints(g_rates, g_structure);
    // TODO Task 4: detect BOS / CHoCH, populate g_breaks[]
    // TODO Task 5: identify and score supply/demand zones (g_zones[])
    // TODO Task 6: detect trendlines (g_trendlines[])
