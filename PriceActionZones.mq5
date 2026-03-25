@@ -10,6 +10,7 @@
 #include "Include/PAZ/Constants.mqh"
 #include "Include/PAZ/Structures.mqh"
 #include "Include/PAZ/Inputs.mqh"
+#include "Include/PAZ/MTFData.mqh"
 
 //=============================================================================
 // Global state
@@ -144,7 +145,9 @@ int OnCalculate(const int      rates_total,
    if(rates_total < 100)
       return 0;
 
-   // TODO Task 2: refresh MTF rate caches (g_rates)
+   // 1. Load MTF data
+   if(!MTFLoadAll(g_rates, 100))
+      return prev_calculated; // wait for data
    // TODO Task 3: detect swing points and update g_structure[]
    // TODO Task 4: detect BOS / CHoCH, populate g_breaks[]
    // TODO Task 5: identify and score supply/demand zones (g_zones[])
