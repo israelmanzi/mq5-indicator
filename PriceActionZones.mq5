@@ -21,6 +21,7 @@
 #include "Include/PAZ/EntrySignals.mqh"
 #include "Include/PAZ/TradeManagement.mqh"
 #include "Include/PAZ/Drawing.mqh"
+#include "Include/PAZ/Dashboard.mqh"
 
 //=============================================================================
 // Global state
@@ -67,8 +68,36 @@ int             g_eqLevelCount = 0;
 // Active trade state
 TradeState      g_trade;
 
+// Alert deduplication timestamp
+datetime g_lastAlertTime = 0;
+
 // Dashboard snapshot
 DashboardData   g_dashboard;
+
+//=============================================================================
+// FireAlerts — Task 14
+//=============================================================================
+void FireAlerts(const EntrySignal &entries[], int entryCount)
+  {
+   if(entryCount == 0) return;
+
+   // Only alert on the most recent entry
+   if(!entries[entryCount - 1].isConfirmed) return;
+   if(entries[entryCount - 1].signalTime <= g_lastAlertTime) return;
+
+   g_lastAlertTime = entries[entryCount - 1].signalTime;
+
+   string msg = StringFormat("PAZ %s %s R:R 1:%.1f @ %.5f | SL %.5f | TP %.5f",
+                 _Symbol,
+                 (entries[entryCount - 1].direction == ENTRY_BUY) ? "BUY" : "SELL",
+                 entries[entryCount - 1].rrRatio,
+                 entries[entryCount - 1].entryPrice,
+                 entries[entryCount - 1].slPrice,
+                 entries[entryCount - 1].tpPrice);
+
+   if(InpAlertSound) Alert(msg);
+   if(InpAlertPush)  SendNotification(msg);
+  }
 
 //=============================================================================
 // OnInit
@@ -219,7 +248,13 @@ int OnCalculate(const int      rates_total,
            g_keyLevels, g_keyLevelCount,
            g_entries, g_entryCount,
            g_trade);
-   // TODO Task 13: fire alerts
+   // 13. Update dashboard
+   BuildDashboardData(g_dashboard, g_structure, g_zones, g_zoneCount,
+                      g_breaks, g_breakCount, g_entries, g_entryCount, g_trade);
+   DrawDashboard(g_dashboard);
+
+   // 14. Fire alerts
+   FireAlerts(g_entries, g_entryCount);
 
    return rates_total;
   }
