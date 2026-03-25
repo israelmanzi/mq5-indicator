@@ -14,6 +14,7 @@
 #include "Include/PAZ/SwingPoints.mqh"
 #include "Include/PAZ/MarketStructure.mqh"
 #include "Include/PAZ/ZoneBuilder.mqh"
+#include "Include/PAZ/CandlePatterns.mqh"
 
 //=============================================================================
 // Global state
@@ -157,9 +158,20 @@ int OnCalculate(const int      rates_total,
    UpdateAllStructure(g_rates, g_structure, g_breaks, g_breakCount);
    // 4-5. Build and refine zones (D1, H4, H1 -> M15 refinement)
    UpdateAllZones(g_rates, g_zones, g_zoneCount, g_breaks, g_breakCount, g_structure);
-   // TODO Task 6: detect trendlines (g_trendlines[])
-   // TODO Task 7: detect key levels and equal highs/lows
-   // TODO Task 8: scan for candle patterns (g_candleSignals[])
+   // 6. Detect candlestick patterns (H1, M15)
+   g_candleSignalCount = 0;
+   ArrayResize(g_candleSignals, 0);
+   double tolerance = _Point * 10;
+   // H1 patterns (index 2 in TF_LIST)
+   DetectCandlePatterns(g_rates[2].rates, g_rates[2].count, PERIOD_H1,
+                        g_zones, g_zoneCount, g_structure[2],
+                        g_candleSignals, g_candleSignalCount, tolerance);
+   // M15 patterns (index 3)
+   DetectCandlePatterns(g_rates[3].rates, g_rates[3].count, PERIOD_M15,
+                        g_zones, g_zoneCount, g_structure[3],
+                        g_candleSignals, g_candleSignalCount, tolerance);
+   // TODO Task 7: detect trendlines (g_trendlines[])
+   // TODO Task 8: detect key levels and equal highs/lows
    // TODO Task 9: detect liquidity sweeps (g_liqEvents[])
    // TODO Task 10: build entry signals (g_entries[])
    // TODO Task 11: draw all chart objects
