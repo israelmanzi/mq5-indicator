@@ -151,7 +151,7 @@ struct TradeState
    double            initialSL;
    double            initialTP;
    bool              isBreakeven;
-   bool              trailingSwings;
+   int               trailingSwings;
    datetime          entryTime;
    string            objNameSL;
    string            objNameTP;

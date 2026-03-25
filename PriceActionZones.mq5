@@ -19,6 +19,7 @@
 #include "Include/PAZ/Trendlines.mqh"
 #include "Include/PAZ/KeyLevels.mqh"
 #include "Include/PAZ/EntrySignals.mqh"
+#include "Include/PAZ/TradeManagement.mqh"
 
 //=============================================================================
 // Global state
@@ -112,7 +113,7 @@ int OnInit()
    //--- Initialise trade state
    g_trade.isActive      = false;
    g_trade.isBreakeven   = false;
-   g_trade.trailingSwings = false;
+   g_trade.trailingSwings = 0;
 
    //--- Initialise dashboard
    g_dashboard.d1Bias         = TREND_RANGING;
@@ -202,7 +203,12 @@ int OnCalculate(const int      rates_total,
                           g_entries, g_entryCount,
                           currentPrice, spread_val);
 
-   // TODO Task 11: draw all chart objects
+   // 11. Manage trades (SL/TP trailing)
+   double trailBuffer = spread_val * _Point + _Point * 5;
+   UpdateTradeManagement(g_trade, currentPrice, g_structure[3],
+                         g_entries, g_entryCount, trailBuffer);
+
+   // TODO Task 12: draw all chart objects
    // TODO Task 12: update dashboard
    // TODO Task 13: fire alerts
 
