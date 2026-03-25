@@ -1,0 +1,17 @@
+# Claude Code
+.claude/
+docs/superpowers/
+
+# MetaTrader compiled
+*.ex5
+*.ex4
+
+# MetaEditor logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Old files
+support_and_resistance.mq5
