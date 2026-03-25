@@ -15,6 +15,7 @@
 #include "Include/PAZ/MarketStructure.mqh"
 #include "Include/PAZ/ZoneBuilder.mqh"
 #include "Include/PAZ/CandlePatterns.mqh"
+#include "Include/PAZ/Liquidity.mqh"
 
 //=============================================================================
 // Global state
@@ -170,6 +171,9 @@ int OnCalculate(const int      rates_total,
    DetectCandlePatterns(g_rates[3].rates, g_rates[3].count, PERIOD_M15,
                         g_zones, g_zoneCount, g_structure[3],
                         g_candleSignals, g_candleSignalCount, tolerance);
+   // 7. Detect liquidity events (H1, M15)
+   UpdateLiquidity(g_rates, g_structure, g_eqLevels, g_eqLevelCount,
+                   g_liqEvents, g_liqEventCount, tolerance);
    // TODO Task 7: detect trendlines (g_trendlines[])
    // TODO Task 8: detect key levels and equal highs/lows
    // TODO Task 9: detect liquidity sweeps (g_liqEvents[])
