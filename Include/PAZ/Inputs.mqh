@@ -56,6 +56,17 @@ input bool   InpShowH1Zones  = true;    // Show H1 supply/demand zones
 input bool   InpShowM15BOS   = true;    // Show M15 BOS/CHoCH markers
 
 //=============================================================================
+// Visual Layers (clean chart by default, toggle ON for detail)
+//=============================================================================
+input group "=== Visual Layers ==="
+input bool   InpShowTrendlines    = false;   // Show trendlines
+input bool   InpShowCandleLabels  = false;   // Show candlestick pattern labels
+input bool   InpShowEqualHL       = false;   // Show equal highs/lows
+input bool   InpShowKeyLevels     = false;   // Show key levels
+input bool   InpShowSweepMarkers  = false;   // Show liquidity sweep markers
+input int    InpNearestZones      = 3;       // Max zones to show above+below price (0=all)
+
+//=============================================================================
 // Dashboard
 //=============================================================================
 input group "=== Dashboard ==="

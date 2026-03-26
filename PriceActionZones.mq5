@@ -274,14 +274,15 @@ int OnCalculate(const int      rates_total,
            g_eqLevels, g_eqLevelCount,
            g_keyLevels, g_keyLevelCount,
            g_entries, g_entryCount,
-           g_trade);
-   // 13. Update dashboard
-   BuildDashboardData(g_dashboard, g_structure, g_zones, g_zoneCount,
-                      g_breaks, g_breakCount, g_entries, g_entryCount, g_trade);
-   DrawDashboard(g_dashboard);
+           g_trade,
+           currentPrice);
+   // 13. Update dashboard (DEBUG: disabled)
+   //BuildDashboardData(g_dashboard, g_structure, g_zones, g_zoneCount,
+   //                   g_breaks, g_breakCount, g_entries, g_entryCount, g_trade);
+   //DrawDashboard(g_dashboard);
 
-   // 14. Fire alerts
-   FireAlerts(g_entries, g_entryCount);
+   // 14. Fire alerts (DEBUG: disabled)
+   //FireAlerts(g_entries, g_entryCount);
 
    return rates_total;
   }

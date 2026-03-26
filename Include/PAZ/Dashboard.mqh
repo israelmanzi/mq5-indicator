@@ -126,84 +126,74 @@ void DrawDashboard(const DashboardData &dash)
       return;
 
    const string PFX    = OBJ_PREFIX + "DASH_";
-   const int    PW     = 230;
-   const int    PH     = 180;
-   const int    X0     = 10;   // panel left edge offset
-   const int    Y0     = 10;   // panel top edge offset
-   const int    ROWH   = 18;
+   const int    PW     = 180;
+   const int    PH     = 80;
+   const int    X0     = 10;
+   const int    Y0     = 10;
+   const int    ROWH   = 16;
 
-   // Determine label X for right-side corners (labels anchor from right edge)
    bool rightSide = (InpDashCorner == CORNER_RIGHT_UPPER ||
                      InpDashCorner == CORNER_RIGHT_LOWER);
    int labelX = rightSide ? (X0 + PW - 5) : (X0 + 6);
 
-   // --- Background rectangle ---
+   // --- Background ---
    string bgName = PFX + "BG";
    if(ObjectFind(0, bgName) < 0)
       ObjectCreate(0, bgName, OBJ_RECTANGLE_LABEL, 0, 0, 0);
-   ObjectSetInteger(0, bgName, OBJPROP_CORNER,     InpDashCorner);
-   ObjectSetInteger(0, bgName, OBJPROP_XDISTANCE,  X0);
-   ObjectSetInteger(0, bgName, OBJPROP_YDISTANCE,  Y0);
-   ObjectSetInteger(0, bgName, OBJPROP_XSIZE,      PW);
-   ObjectSetInteger(0, bgName, OBJPROP_YSIZE,      PH);
-   ObjectSetInteger(0, bgName, OBJPROP_BGCOLOR,    CLR_DASH_BG);
+   ObjectSetInteger(0, bgName, OBJPROP_CORNER,       InpDashCorner);
+   ObjectSetInteger(0, bgName, OBJPROP_XDISTANCE,    X0);
+   ObjectSetInteger(0, bgName, OBJPROP_YDISTANCE,    Y0);
+   ObjectSetInteger(0, bgName, OBJPROP_XSIZE,        PW);
+   ObjectSetInteger(0, bgName, OBJPROP_YSIZE,        PH);
+   ObjectSetInteger(0, bgName, OBJPROP_BGCOLOR,      CLR_DASH_BG);
    ObjectSetInteger(0, bgName, OBJPROP_BORDER_COLOR, C'60,60,60');
-   ObjectSetInteger(0, bgName, OBJPROP_SELECTABLE, false);
-   ObjectSetInteger(0, bgName, OBJPROP_HIDDEN,     true);
+   ObjectSetInteger(0, bgName, OBJPROP_SELECTABLE,   false);
+   ObjectSetInteger(0, bgName, OBJPROP_HIDDEN,       true);
 
-   // --- Rows ---
-   int y = Y0 + 8;
+   int y = Y0 + 6;
 
-   // Title
-   DashLabel(PFX + "TITLE", labelX, y,
-             "PRICE ACTION ZONES", CLR_DASH_TEXT, 9, InpDashCorner);
+   // Row 1: Bias — compact "D1 ▲  H4 ▲  H1 ▼"
+   string biasRow = "";
+   string tfs[] = {"D1", "H4", "H1"};
+   ENUM_TREND_DIR biases[3];
+   biases[0] = dash.d1Bias;
+   biases[1] = dash.h4Bias;
+   biases[2] = dash.h1Bias;
+
+   // Draw each TF bias as a separate label for individual coloring
+   int xOff = labelX;
+   for(int i = 0; i < 3; i++)
+     {
+      string arrow = "";
+      if(biases[i] == TREND_BULLISH) arrow = " +";
+      else if(biases[i] == TREND_BEARISH) arrow = " -";
+      else arrow = " =";
+
+      string tfLabel = tfs[i] + arrow;
+      string name = PFX + "B" + IntegerToString(i);
+
+      if(rightSide)
+        {
+         DashLabel(name, X0 + PW - 6 - i * 58, y, tfLabel,
+                   TrendColor(biases[i]), 9, InpDashCorner);
+        }
+      else
+        {
+         DashLabel(name, X0 + 6 + i * 58, y, tfLabel,
+                   TrendColor(biases[i]), 9, InpDashCorner);
+        }
+     }
+   y += ROWH + 2;
+
+   // Row 2: Setup status
+   DashLabel(PFX + "SETUP", labelX, y,
+             dash.tradeStatus, CLR_DASH_TEXT, 8, InpDashCorner);
    y += ROWH;
 
-   // Separator
-   DashLabel(PFX + "SEP", labelX, y,
-             "--------------------", CLR_DASH_TEXT, 8, InpDashCorner);
-   y += ROWH;
-
-   // D1 bias
-   DashLabel(PFX + "D1", labelX, y,
-             StringFormat("D1  : %s", TrendStr(dash.d1Bias)),
-             TrendColor(dash.d1Bias), 8, InpDashCorner);
-   y += ROWH;
-
-   // H4 bias
-   DashLabel(PFX + "H4", labelX, y,
-             StringFormat("H4  : %s", TrendStr(dash.h4Bias)),
-             TrendColor(dash.h4Bias), 8, InpDashCorner);
-   y += ROWH;
-
-   // H1 bias
-   DashLabel(PFX + "H1", labelX, y,
-             StringFormat("H1  : %s", TrendStr(dash.h1Bias)),
-             TrendColor(dash.h1Bias), 8, InpDashCorner);
-   y += ROWH;
-
-   // Active zones
+   // Row 3: Zone count (subtle)
    DashLabel(PFX + "ZONES", labelX, y,
-             StringFormat("Zones: %d active", dash.activeZoneCount),
-             CLR_DASH_TEXT, 8, InpDashCorner);
-   y += ROWH;
-
-   // Last BOS
-   DashLabel(PFX + "BOS", labelX, y,
-             StringFormat("BOS: %s", dash.lastBOS),
-             CLR_BOS_BULL, 8, InpDashCorner);
-   y += ROWH;
-
-   // Last CHoCH
-   DashLabel(PFX + "CHOCH", labelX, y,
-             StringFormat("CHoCH: %s", dash.lastCHoCH),
-             CLR_CHOCH, 8, InpDashCorner);
-   y += ROWH;
-
-   // Trade status
-   DashLabel(PFX + "TRADE", labelX, y,
-             StringFormat("Trade: %s", dash.tradeStatus),
-             CLR_DASH_TEXT, 8, InpDashCorner);
+             StringFormat("%d zones active", dash.activeZoneCount),
+             C'120,120,120', 7, InpDashCorner);
   }
 
 #endif // PAZ_DASHBOARD_MQH

@@ -26,10 +26,35 @@ string TFShortName(ENUM_TIMEFRAMES tf)
 //=============================================================================
 bool IsTFVisible(ENUM_TIMEFRAMES tf)
   {
+   // User toggle overrides
    if(tf == PERIOD_D1  && !InpShowD1Zones) return false;
    if(tf == PERIOD_H4  && !InpShowH4Zones) return false;
    if(tf == PERIOD_H1  && !InpShowH1Zones) return false;
-   return true;
+
+   // Auto-filter by current chart timeframe using seconds (enum values are unreliable for comparison)
+   int chartSec = PeriodSeconds(Period());
+   int d1Sec    = PeriodSeconds(PERIOD_D1);   // 86400
+   int h4Sec    = PeriodSeconds(PERIOD_H4);   // 14400
+   int h1Sec    = PeriodSeconds(PERIOD_H1);   // 3600
+   int m15Sec   = PeriodSeconds(PERIOD_M15);  // 900
+
+   if(chartSec >= d1Sec)
+     {
+      // D1+ chart: D1 zones only
+      return (tf == PERIOD_D1);
+     }
+   if(chartSec >= h4Sec)
+     {
+      // H4 chart: D1 + H4 zones
+      return (tf == PERIOD_D1 || tf == PERIOD_H4);
+     }
+   if(chartSec >= h1Sec)
+     {
+      // H1 chart: H4 + H1 zones
+      return (tf == PERIOD_H4 || tf == PERIOD_H1);
+     }
+   // M15 and below: H1 zones only
+   return (tf == PERIOD_H1);
   }
 
 //=============================================================================
@@ -146,97 +171,136 @@ void DrawArrow(string name, datetime time, double price,
 //=============================================================================
 // Cleanup helper: delete stale objects with indices >= currentCount
 //=============================================================================
-void CleanupStaleObjects(string prefix, int currentCount)
+void DeleteObjectAndSubs(string name)
   {
-   // Delete objects with indices >= currentCount
-   for(int i = currentCount; i < currentCount + 50; i++)
+   if(ObjectFind(0, name) >= 0) ObjectDelete(0, name);
+   string subs[] = {"_lbl","_ref","_steep","_sl","_tp","_big","_top","_bot","_reflbl"};
+   for(int s = 0; s < ArraySize(subs); s++)
      {
-      string name = StringFormat("%s%d", prefix, i);
-      if(ObjectFind(0, name) >= 0) ObjectDelete(0, name);
-      // Also try sub-objects (labels, refined zones)
-      string sub1 = name + "_lbl";
-      if(ObjectFind(0, sub1) >= 0) ObjectDelete(0, sub1);
-      string sub2 = name + "_ref";
-      if(ObjectFind(0, sub2) >= 0) ObjectDelete(0, sub2);
-      string sub3 = name + "_steep";
-      if(ObjectFind(0, sub3) >= 0) ObjectDelete(0, sub3);
-      string sub4 = name + "_sl";
-      if(ObjectFind(0, sub4) >= 0) ObjectDelete(0, sub4);
-      string sub5 = name + "_tp";
-      if(ObjectFind(0, sub5) >= 0) ObjectDelete(0, sub5);
+      string sub = name + subs[s];
+      if(ObjectFind(0, sub) >= 0) ObjectDelete(0, sub);
+     }
+  }
+
+// Track previous counts to only cleanup when counts shrink
+int g_prevZoneDrawn    = 0;
+int g_prevBreakDrawn   = 0;
+int g_prevTLDrawn      = 0;
+int g_prevCPDrawn      = 0;
+int g_prevLiqDrawn     = 0;
+int g_prevEqDrawn      = 0;
+int g_prevKLDrawn      = 0;
+int g_prevEntDrawn     = 0;
+
+void CleanupStaleObjects(string prefix, int currentCount, int &prevCount)
+  {
+   // Only delete objects when count has shrunk
+   if(currentCount < prevCount)
+     {
+      for(int i = currentCount; i < prevCount; i++)
+        {
+         string name = StringFormat("%s%d", prefix, i);
+         DeleteObjectAndSubs(name);
+        }
      }
   }
 
 //=============================================================================
 // 6. DrawZones
 //=============================================================================
-void DrawZones(PriceZone &zones[], int zoneCount)
+void DrawZones(PriceZone &zones[], int zoneCount, double currentPrice)
   {
-   CleanupStaleObjects(OBJ_PREFIX + "Zone_", zoneCount);
+   // DEBUG: log zone counts per TF
+   int cntD1=0, cntH4=0, cntH1=0;
+   for(int z=0; z<zoneCount; z++)
+     {
+      if(zones[z].tf==PERIOD_D1) cntD1++;
+      if(zones[z].tf==PERIOD_H4) cntH4++;
+      if(zones[z].tf==PERIOD_H1) cntH1++;
+     }
+   PrintFormat("PAZ DEBUG: Zones total=%d (D1=%d H4=%d H1=%d) ChartTF=%s Price=%.5f",
+               zoneCount, cntD1, cntH4, cntH1, EnumToString(Period()), currentPrice);
+
+   CleanupStaleObjects(OBJ_PREFIX + "Zone_", zoneCount, g_prevZoneDrawn);
    datetime rightEdge = TimeCurrent() + 5 * PeriodSeconds(PERIOD_D1);
 
-   for(int i = 0; i < zoneCount; i++)
+   // If InpNearestZones > 0, only show N nearest zones above and below price
+   int drawnAbove = 0, drawnBelow = 0;
+   int maxPerSide = (InpNearestZones > 0) ? InpNearestZones : 9999;
+
+   // Sort indices by distance to current price (simple selection for small arrays)
+   int order[];
+   ArrayResize(order, zoneCount);
+   for(int i = 0; i < zoneCount; i++) order[i] = i;
+   for(int i = 0; i < zoneCount - 1; i++)
      {
+      for(int j = i + 1; j < zoneCount; j++)
+        {
+         double distI = MathMin(MathAbs(currentPrice - zones[order[i]].upper),
+                                MathAbs(currentPrice - zones[order[i]].lower));
+         double distJ = MathMin(MathAbs(currentPrice - zones[order[j]].upper),
+                                MathAbs(currentPrice - zones[order[j]].lower));
+         if(distJ < distI)
+           {
+            int tmp = order[i]; order[i] = order[j]; order[j] = tmp;
+           }
+        }
+     }
+
+   for(int idx = 0; idx < zoneCount; idx++)
+     {
+      int i = order[idx];
+
       // Skip zones whose TF visibility is toggled off
       if(!IsTFVisible(zones[i].tf))
          continue;
 
-      // Determine colors and style by zone type and state
-      color    zoneClr;
-      bool     fill;
-      int      width = 1;
-      ENUM_LINE_STYLE style = STYLE_SOLID;
-
-      bool isDemand = (zones[i].zoneType == ZONE_DEMAND);
-
-      switch(zones[i].state)
+      // Nearest-zone filter
+      if(InpNearestZones > 0)
         {
-         case ZONE_ACTIVE:
-            zoneClr = isDemand ? CLR_DEMAND_ACTIVE : CLR_SUPPLY_ACTIVE;
-            fill    = true;
-            style   = STYLE_SOLID;
-            break;
-         case ZONE_MITIGATED:
-            zoneClr = isDemand ? CLR_DEMAND_MITIGATED : CLR_SUPPLY_MITIGATED;
-            fill    = false;
-            style   = STYLE_DASH;
-            break;
-         case ZONE_FADED:
-            zoneClr = isDemand ? CLR_DEMAND_ACTIVE : CLR_SUPPLY_ACTIVE;
-            fill    = false;
-            style   = STYLE_SOLID;
-            break;
-         default:
-            zoneClr = CLR_DEMAND_ACTIVE;
-            fill    = false;
-            break;
+         double zoneMid = (zones[i].upper + zones[i].lower) / 2.0;
+         if(zoneMid > currentPrice)
+           { if(drawnAbove >= maxPerSide) continue; drawnAbove++; }
+         else
+           { if(drawnBelow >= maxPerSide) continue; drawnBelow++; }
         }
 
-      // Build object name
+      // Only draw ACTIVE zones — skip mitigated and faded for now
+      if(zones[i].state != ZONE_ACTIVE)
+         continue;
+
+      bool isDemand = (zones[i].zoneType == ZONE_DEMAND);
       string baseName = OBJ_PREFIX + "Zone_" + IntegerToString(i);
       zones[i].objName = baseName;
 
-      // Draw main rectangle
+      // --- Outer zone: subtle border, no fill ---
+      color borderClr = isDemand ? CLR_DEMAND_ACTIVE : CLR_SUPPLY_ACTIVE;
       DrawRectangle(baseName, zones[i].timeCreated, zones[i].upper,
-                    rightEdge, zones[i].lower, zoneClr, width, style, fill);
+                    rightEdge, zones[i].lower, borderClr, 1, STYLE_DOT, false);
 
-      // Label: "TF DM/SP Q:score"
-      string typeLabel = isDemand ? "DM" : "SP";
-      string label = TFShortName(zones[i].tf) + " " + typeLabel +
-                     " Q:" + DoubleToString(zones[i].quality, 1);
-      string lblName = baseName + "_lbl";
-      double lblPrice = isDemand ? zones[i].lower : zones[i].upper;
-      ENUM_ANCHOR_POINT anchor = isDemand ? ANCHOR_LEFT_UPPER : ANCHOR_LEFT_LOWER;
-      DrawText(lblName, zones[i].timeCreated, lblPrice, label, zoneClr, 7, anchor);
+      // --- Label: "BUY ZONE" or "SELL ZONE" + TF ---
+      string zoneLabel = isDemand ? "BUY ZONE" : "SELL ZONE";
+      string fullLabel = zoneLabel + "  " + TFShortName(zones[i].tf);
+      string bigLblName = baseName + "_big";
+      double zoneMidPrice = (zones[i].upper + zones[i].lower) / 2.0;
+      color  labelClr = isDemand ? CLR_DEMAND_ACTIVE : CLR_SUPPLY_ACTIVE;
+      DrawText(bigLblName, zones[i].timeCreated, zoneMidPrice,
+               fullLabel, labelClr, 10, ANCHOR_LEFT);
 
-      // Refined zone (inner rectangle) for active zones
-      if(zones[i].state == ZONE_ACTIVE &&
-         zones[i].refinedUpper != 0.0 && zones[i].refinedLower != 0.0)
+      // --- Refined zone: filled, this is the actual entry area ---
+      if(zones[i].refinedUpper != 0.0 && zones[i].refinedLower != 0.0)
         {
          color refClr = isDemand ? CLR_DEMAND_REFINED : CLR_SUPPLY_REFINED;
          string refName = baseName + "_ref";
          DrawRectangle(refName, zones[i].timeCreated, zones[i].refinedUpper,
                        rightEdge, zones[i].refinedLower, refClr, 1, STYLE_SOLID, true);
+
+         // Small label on refined zone
+         string refLblName = baseName + "_reflbl";
+         double refMid = (zones[i].refinedUpper + zones[i].refinedLower) / 2.0;
+         string refLabel = isDemand ? "ENTRY" : "ENTRY";
+         DrawText(refLblName, zones[i].timeCreated, refMid,
+                  refLabel, refClr, 7, ANCHOR_LEFT);
         }
      }
   }
@@ -246,7 +310,7 @@ void DrawZones(PriceZone &zones[], int zoneCount)
 //=============================================================================
 void DrawStructureBreaks(const StructureBreak &breaks[], int breakCount)
   {
-   CleanupStaleObjects(OBJ_PREFIX + "BRK_", breakCount);
+   CleanupStaleObjects(OBJ_PREFIX + "BRK_", breakCount, g_prevBreakDrawn);
 
    if(!InpShowM15BOS)
       return;
@@ -296,7 +360,10 @@ void DrawStructureBreaks(const StructureBreak &breaks[], int breakCount)
 //=============================================================================
 void DrawTrendlines(TrendLine &lines[], int lineCount)
   {
-   CleanupStaleObjects(OBJ_PREFIX + "TL_", lineCount);
+   CleanupStaleObjects(OBJ_PREFIX + "TL_", lineCount, g_prevTLDrawn);
+
+   if(!InpShowTrendlines)
+      return;
 
    for(int i = 0; i < lineCount; i++)
      {
@@ -346,7 +413,10 @@ void DrawTrendlines(TrendLine &lines[], int lineCount)
 //=============================================================================
 void DrawCandlePatterns(const CandleSignal &signals[], int signalCount)
   {
-   CleanupStaleObjects(OBJ_PREFIX + "CP_", signalCount);
+   CleanupStaleObjects(OBJ_PREFIX + "CP_", signalCount, g_prevCPDrawn);
+
+   if(!InpShowCandleLabels)
+      return;
 
    for(int i = 0; i < signalCount; i++)
      {
@@ -371,7 +441,10 @@ void DrawCandlePatterns(const CandleSignal &signals[], int signalCount)
 //=============================================================================
 void DrawLiquidityEvents(const LiquidityEvent &events[], int eventCount)
   {
-   CleanupStaleObjects(OBJ_PREFIX + "LIQ_", eventCount);
+   CleanupStaleObjects(OBJ_PREFIX + "LIQ_", eventCount, g_prevLiqDrawn);
+
+   if(!InpShowSweepMarkers)
+      return;
 
    for(int i = 0; i < eventCount; i++)
      {
@@ -393,7 +466,10 @@ void DrawLiquidityEvents(const LiquidityEvent &events[], int eventCount)
 //=============================================================================
 void DrawEqualLevels(const EqualLevel &levels[], int levelCount)
   {
-   CleanupStaleObjects(OBJ_PREFIX + "EQ_", levelCount);
+   CleanupStaleObjects(OBJ_PREFIX + "EQ_", levelCount, g_prevEqDrawn);
+
+   if(!InpShowEqualHL)
+      return;
 
    for(int i = 0; i < levelCount; i++)
      {
@@ -415,7 +491,10 @@ void DrawEqualLevels(const EqualLevel &levels[], int levelCount)
 //=============================================================================
 void DrawKeyLevels(const KeyLevel &levels[], int levelCount)
   {
-   CleanupStaleObjects(OBJ_PREFIX + "KL_", levelCount);
+   CleanupStaleObjects(OBJ_PREFIX + "KL_", levelCount, g_prevKLDrawn);
+
+   if(!InpShowKeyLevels)
+      return;
 
    for(int i = 0; i < levelCount; i++)
      {
@@ -429,7 +508,7 @@ void DrawKeyLevels(const KeyLevel &levels[], int levelCount)
 //=============================================================================
 void DrawEntrySignals(EntrySignal &entries[], int entryCount)
   {
-   CleanupStaleObjects(OBJ_PREFIX + "ENT_", entryCount);
+   CleanupStaleObjects(OBJ_PREFIX + "ENT_", entryCount, g_prevEntDrawn);
 
    if(!InpAlertVisual)
       return;
@@ -510,17 +589,21 @@ void DrawAll(PriceZone          &zones[],         int zoneCount,
              const EqualLevel    &eqLevels[],      int eqLevelCount,
              const KeyLevel      &keyLevels[],     int keyLevelCount,
              EntrySignal         &entries[],        int entryCount,
-             const TradeState    &trade)
+             const TradeState    &trade,
+             double              currentPrice)
   {
-   DrawZones(zones, zoneCount);
-   DrawStructureBreaks(breaks, breakCount);
-   DrawTrendlines(lines, lineCount);
-   DrawCandlePatterns(candleSignals, candleSignalCount);
-   DrawLiquidityEvents(liqEvents, liqEventCount);
-   DrawEqualLevels(eqLevels, eqLevelCount);
-   DrawKeyLevels(keyLevels, keyLevelCount);
-   DrawEntrySignals(entries, entryCount);
-   DrawTradeState(trade);
+   // DEBUG: zones only — enable layers one by one for validation
+   DrawZones(zones, zoneCount, currentPrice);
+   //DrawStructureBreaks(breaks, breakCount);
+   //DrawTrendlines(lines, lineCount);
+   //DrawCandlePatterns(candleSignals, candleSignalCount);
+   //DrawLiquidityEvents(liqEvents, liqEventCount);
+   //DrawEqualLevels(eqLevels, eqLevelCount);
+   //DrawKeyLevels(keyLevels, keyLevelCount);
+   //DrawEntrySignals(entries, entryCount);
+   //DrawTradeState(trade);
+
+   ChartRedraw(0);
   }
 
 #endif // PAZ_DRAWING_MQH
