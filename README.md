@@ -1,22 +1,28 @@
 # PriceActionZones — MT5 Indicator
 
-A pure price action indicator for MetaTrader 5. No lagging indicators, no moving averages — only raw price structure, supply/demand zones, and multi-timeframe analysis from Daily down to M15.
+A pure price action indicator for MetaTrader 5. No lagging indicators, no moving averages — only raw price structure and supply/demand zones across multiple timeframes.
+
+> **Status:** Early development. Zone detection and display is live. Entry signals, BOS/CHoCH, trendlines, and other layers are built but not yet enabled — being validated one layer at a time.
 
 ## What You See on the Chart
 
-The indicator is designed for a **clean chart by default**. You see only what helps you make a decision right now. Additional layers can be toggled on when you need them.
+### Buy Zones
 
-### Default View (always on)
+Dotted blue rectangle outline labeled **"BUY ZONE H1"** (or H4, D1 depending on context). This is where price previously dropped, paused, and reversed upward. Expect buyers to step in here again.
 
-**Buy Zones** — Dotted blue rectangle outline with "BUY ZONE H1" label. This is where price previously dropped, paused, and shot upward. Expect buyers to step in here again.
+If a bright filled blue box labeled **"ENTRY"** appears inside the zone, that's the M15-refined precision area — your tighter entry point.
 
-**Sell Zones** — Dotted red rectangle outline with "SELL ZONE H4" label. This is where price previously rallied, stalled, and dropped. Expect sellers to push price down here.
+### Sell Zones
 
-**Entry Boxes** — Bright filled rectangle inside a zone labeled "ENTRY". This is the M15-refined precision area within the larger zone. Your actual entry point.
+Dotted red rectangle outline labeled **"SELL ZONE H4"**. This is where price previously rallied, stalled, and reversed downward. Expect sellers to push price down here.
 
-**Faded Zones** — Muted, smaller-font version of the above. These zones are old but still unmitigated (price never broke through). They may still hold, but treat with less conviction than fresh zones.
+Bright salmon filled box labeled **"ENTRY"** inside = the refined entry area.
 
-Mitigated zones (price already broke through) are hidden — they no longer matter.
+### Faded Zones
+
+Same as above but with muted colors and smaller text. These zones are old but price never broke through them. They may still hold, but carry less conviction than fresh zones.
+
+Mitigated zones (price already closed through them) are hidden entirely.
 
 ### Smart Timeframe Filtering
 
@@ -29,97 +35,44 @@ Zones auto-filter based on the chart you're viewing:
 | H1 | H4 + H1 |
 | M15 | H1 only |
 
-No manual switching needed. Switch timeframes and the relevant zones appear.
+Switch timeframes and the relevant zones appear automatically.
 
-### Optional Layers (toggle in settings)
+### Nearest Zone Filter
 
-These are OFF by default to keep the chart clean. Enable them under **Visual Layers** in the indicator settings:
+By default, only the 3 nearest zones above and below current price are shown. Configurable in settings (set to 0 for all zones).
 
-| Layer | What it shows |
-|---|---|
-| BOS/CHoCH | Break of Structure and Change of Character lines on M15 — confirms trend continuation or reversal |
-| Trendlines | Auto-drawn from swing points on H4/H1, with break and retest detection |
-| Candle Pattern Labels | Text labels ("BullEng", "Hammer", etc.) at key levels only |
-| Liquidity Sweep Markers | Arrows marking where stops were hunted before a reversal |
-| Equal Highs/Lows | Dotted lines at liquidity pools where stop losses cluster |
-| Key Levels | Multi-touch horizontal levels across timeframes |
+## What's Built But Not Yet Enabled
 
-### Entry Signals
+The following modules are fully implemented in the codebase but commented out while we validate each layer:
 
-When enabled, the indicator marks entries only when **all 7 conditions align**:
+- **BOS/CHoCH** — Break of Structure and Change of Character detection on M15
+- **Trendlines** — Auto-drawn from swing points on H4/H1 with break and retest tracking
+- **Candlestick Patterns** — Engulfing, pin bars, morning/evening star, inside bars, and more — only at key levels
+- **Liquidity Sweeps** — Detects stop hunts before reversals
+- **Equal Highs/Lows** — Liquidity pool detection
+- **Key Levels** — Multi-touch horizontal levels across timeframes
+- **Entry Signals** — 7-step checklist combining all modules (D1 bias, zone alignment, liquidity sweep, M15 BOS, candle pattern, confirmation, R:R filter)
+- **Trade Management** — SL/TP placement, breakeven at 1:1, trailing SL to swing points
+- **Dashboard** — Compact bias + status panel
+- **Alerts** — Push, sound, and visual notifications on entry signals
 
-1. D1 trend bias is clear
-2. Price is at an H4/H1 zone aligned with the trend
-3. A liquidity sweep occurred (stops grabbed)
-4. M15 confirms with a BOS in the trade direction
-5. A candlestick pattern appears at the key level
-6. A confirmation candle closes beyond the signal candle
-7. Reward-to-risk meets the minimum threshold (default 1:2)
-
-Entry types: zone taps, breakout and retest, double tops, double bottoms.
-
-### Trade Management
-
-After an entry signal fires:
-- **SL** placed behind the trigger zone
-- **TP** targets the next opposing zone or key level
-- **Breakeven** at 1:1 — SL moves to entry price
-- **Trailing SL** follows new M15 swing points as price moves in your favor
-
-### Dashboard
-
-A compact panel showing:
-- D1/H4/H1 bias at a glance (+ bullish, - bearish, = ranging)
-- Current trade status
-- Active zone count
-
-## How to Read It
-
-1. **Check the bias** — are the higher timeframes aligned? D1+ H4+ means look for buys only
-2. **Watch the zones** — is price approaching a BUY ZONE from above? That's your area of interest
-3. **Drop to M15** — look for BOS confirmation and a candle pattern at the zone
-4. **Wait for the arrow** — if entry signals are enabled, the green/red arrow means the checklist passed
-5. **SL and TP are mapped** — the tomato line is your stop, the green line is your target
-
-## Color Guide
-
-| Element | Color |
-|---|---|
-| Buy zone outline | Steel Blue |
-| Sell zone outline | Indian Red |
-| Buy entry box (refined) | Bright Blue |
-| Sell entry box (refined) | Salmon |
-| Faded zone | Muted darker version |
-| BOS (bullish) | Dodger Blue |
-| BOS (bearish) | Coral |
-| CHoCH | Gold |
-| Trendlines | Silver |
-| Stop Loss | Tomato |
-| Take Profit | Sea Green |
-| Liquidity sweep | Magenta |
-| Equal highs/lows | Orange |
-| Buy entry arrow | Lime |
-| Sell entry arrow | Red |
+These will be enabled progressively as zone display is validated.
 
 ## Settings
 
-All configurable from the indicator properties panel:
+Configurable from the indicator properties panel:
 
-**Swing Points** — Lookback bars per timeframe (D1=5, H4=3, H1=3, M15=2). Higher = fewer, more significant swings.
+**Swing Points** — Lookback bars per timeframe (D1=5, H4=3, H1=3, M15=2).
 
-**Zones** — Max active zones per TF (default 5), minimum quality score (default 5/10), fade timing, mitigated zone visibility.
-
-**Entry Signals** — Minimum R:R ratio (default 1:2).
-
-**Alerts** — Toggle push notifications, sound alerts, and visual markers independently.
+**Zones** — Max active zones per TF (default 5), minimum quality score (default 5/10), fade timing.
 
 **Timeframe Display** — Toggle D1, H4, H1 zones and M15 BOS/CHoCH.
 
 **Visual Layers** — Toggle trendlines, candle labels, liquidity markers, equal highs/lows, key levels. All OFF by default.
 
-**Nearest Zones** — How many zones to show above and below current price (default 3). Set to 0 for all.
+**Nearest Zones** — Zones shown above + below price (default 3, 0 = all).
 
-**Dashboard** — Toggle on/off, choose corner position.
+**Dashboard** — Toggle on/off, choose corner.
 
 ## Installation
 
@@ -129,7 +82,7 @@ All configurable from the indicator properties panel:
 
 ### File Placement
 
-Place files inside your MT5 data folder (find it via **File > Open Data Folder** in MT5):
+Place inside your MT5 data folder (**File > Open Data Folder** in MT5):
 
 ```
 MQL5/
@@ -156,7 +109,7 @@ MQL5/
 
 ### Linux (Bottles/Wine)
 
-A `deploy.sh` script is included. Run `./deploy.sh` from the project directory to copy files to the MT5 indicators folder, then compile in MetaEditor.
+Run `./deploy.sh` from the project directory to copy files to the MT5 indicators folder, then compile in MetaEditor.
 
 ## Disclaimer
 
