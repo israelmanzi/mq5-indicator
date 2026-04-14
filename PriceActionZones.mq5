@@ -68,35 +68,149 @@ int             g_eqLevelCount = 0;
 // Active trade state
 TradeState      g_trade;
 
-// Alert deduplication timestamp
-datetime g_lastAlertTime = 0;
+// Alert deduplication — track which zones have already alerted per stage
+string g_alertedStage1[];
+int    g_alertedStage1Count = 0;
+string g_alertedStage2[];
+int    g_alertedStage2Count = 0;
 
 // Dashboard snapshot
 DashboardData   g_dashboard;
 
 //=============================================================================
-// FireAlerts — Task 14
+// Helper: check if a zone ID already triggered an alert
 //=============================================================================
-void FireAlerts(const EntrySignal &entries[], int entryCount)
+bool AlreadyAlerted(const string &list[], int count, string zoneId)
   {
-   if(entryCount == 0) return;
+   for(int i = 0; i < count; i++)
+      if(list[i] == zoneId) return true;
+   return false;
+  }
 
-   // Only alert on the most recent entry
-   if(!entries[entryCount - 1].isConfirmed) return;
-   if(entries[entryCount - 1].signalTime <= g_lastAlertTime) return;
-
-   g_lastAlertTime = entries[entryCount - 1].signalTime;
-
-   string msg = StringFormat("PAZ %s %s R:R 1:%.1f @ %.5f | SL %.5f | TP %.5f",
-                 _Symbol,
-                 (entries[entryCount - 1].direction == ENTRY_BUY) ? "BUY" : "SELL",
-                 entries[entryCount - 1].rrRatio,
-                 entries[entryCount - 1].entryPrice,
-                 entries[entryCount - 1].slPrice,
-                 entries[entryCount - 1].tpPrice);
-
+//=============================================================================
+// Helper: send alert on all channels
+//=============================================================================
+void SendAllChannels(string msg)
+  {
+   Print("PAZ ALERT: ", msg);
    if(InpAlertSound) Alert(msg);
    if(InpAlertPush)  SendNotification(msg);
+  }
+
+//=============================================================================
+// Two-Stage Alert System
+//=============================================================================
+void FireAlerts(const PriceZone &zones[], int zoneCount,
+                const StructureState &structure[],
+                const LiquidityEvent &liqEvents[], int liqEventCount,
+                const StructureBreak &breaks[], int breakCount,
+                const CandleSignal &candleSignals[], int candleSignalCount,
+                const MTFRates &rates[],
+                double currentPrice)
+  {
+   ENUM_ENTRY_DIR biasDir;
+   bool step1 = CheckD1Bias(structure[0], biasDir);
+   if(!step1) return;
+
+   datetime since = TimeCurrent() - 24 * 3600;
+   bool step3 = CheckLiquiditySweep(liqEvents, liqEventCount, biasDir, since);
+   bool step4 = CheckM15BOS(breaks, breakCount, biasDir, since);
+
+   int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+
+   for(int i = 0; i < zoneCount; i++)
+     {
+      if(zones[i].state != ZONE_ACTIVE) continue;
+      if(zones[i].refinedUpper == 0.0 || zones[i].refinedLower == 0.0) continue;
+
+      bool isDemand = (zones[i].zoneType == ZONE_DEMAND);
+      bool step2 = (biasDir == ENTRY_BUY && isDemand) ||
+                    (biasDir == ENTRY_SELL && !isDemand);
+      if(!step2) continue;
+
+      // Step 5: candle pattern at zone
+      bool step5 = false;
+      for(int s = candleSignalCount - 1; s >= 0; s--)
+        {
+         if(candleSignals[s].time < since) break;
+         if(!candleSignals[s].atKeyLevel) continue;
+         if(candleSignals[s].price >= zones[i].lower &&
+            candleSignals[s].price <= zones[i].upper)
+           {
+            bool match = (biasDir == ENTRY_BUY && IsPatternBullish(candleSignals[s].pattern)) ||
+                         (biasDir == ENTRY_SELL && !IsPatternBullish(candleSignals[s].pattern));
+            if(match) { step5 = true; break; }
+           }
+        }
+
+      int passed = (step1?1:0) + (step2?1:0) + (step3?1:0) + (step4?1:0) + (step5?1:0);
+
+      // Build zone ID for dedup
+      string zoneId = IntegerToString((long)zones[i].timeCreated) + "_" +
+                      IntegerToString(zones[i].zoneType);
+      string dir = (biasDir == ENTRY_BUY) ? "BUY" : "SELL";
+
+      // --- Stage 1: Heads Up (5/5 conditions met) ---
+      if(passed == 5 && !AlreadyAlerted(g_alertedStage1, g_alertedStage1Count, zoneId))
+        {
+         string msg = StringFormat("PAZ %s %s ZONE READY 5/5 | Zone %s-%s",
+                       _Symbol, dir,
+                       DoubleToString(zones[i].lower, digits),
+                       DoubleToString(zones[i].upper, digits));
+         SendAllChannels(msg);
+
+         ArrayResize(g_alertedStage1, g_alertedStage1Count + 1);
+         g_alertedStage1[g_alertedStage1Count] = zoneId;
+         g_alertedStage1Count++;
+        }
+
+      // --- Stage 2: Enter Now (5/5 + confirmation candle) ---
+      if(passed == 5 && !AlreadyAlerted(g_alertedStage2, g_alertedStage2Count, zoneId))
+        {
+         // Find the most recent matching candle pattern time for confirmation check
+         datetime patternTime = 0;
+         for(int s = candleSignalCount - 1; s >= 0; s--)
+           {
+            if(candleSignals[s].time < since) break;
+            if(!candleSignals[s].atKeyLevel) continue;
+            if(candleSignals[s].price >= zones[i].lower &&
+               candleSignals[s].price <= zones[i].upper)
+              {
+               bool match = (biasDir == ENTRY_BUY && IsPatternBullish(candleSignals[s].pattern)) ||
+                            (biasDir == ENTRY_SELL && !IsPatternBullish(candleSignals[s].pattern));
+               if(match) { patternTime = candleSignals[s].time; break; }
+              }
+           }
+
+         if(patternTime > 0)
+           {
+            // Check confirmation on M15 (index 3)
+            bool confirmed = CheckConfirmation(rates[3].rates, rates[3].count,
+                                               biasDir, patternTime, PERIOD_M15);
+            if(confirmed)
+              {
+               // Calculate SL/TP
+               double buffer = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD) * _Point + _Point * 5;
+               double sl = CalcSL(zones[i], biasDir, buffer);
+               double tp = CalcTP(biasDir, currentPrice, zones, zoneCount,
+                                  g_keyLevels, g_keyLevelCount);
+
+               string slStr = DoubleToString(sl, digits);
+               string tpStr = (tp > 0) ? DoubleToString(tp, digits) : "---";
+
+               string msg = StringFormat("PAZ %s %s @ %s | SL %s | TP %s",
+                             _Symbol, dir,
+                             DoubleToString(currentPrice, digits),
+                             slStr, tpStr);
+               SendAllChannels(msg);
+
+               ArrayResize(g_alertedStage2, g_alertedStage2Count + 1);
+               g_alertedStage2[g_alertedStage2Count] = zoneId;
+               g_alertedStage2Count++;
+              }
+           }
+        }
+     }
   }
 
 //=============================================================================
@@ -209,6 +323,11 @@ int OnCalculate(const int      rates_total,
       ArrayResize(g_trendlines, 0);
       ArrayResize(g_keyLevels, 0);
       ArrayResize(g_entries, 0);
+      // Reset alert dedup
+      g_alertedStage1Count = 0;
+      g_alertedStage2Count = 0;
+      ArrayResize(g_alertedStage1, 0);
+      ArrayResize(g_alertedStage2, 0);
      }
 
    // 1. Load MTF data
@@ -275,14 +394,19 @@ int OnCalculate(const int      rates_total,
            g_keyLevels, g_keyLevelCount,
            g_entries, g_entryCount,
            g_trade,
-           currentPrice);
+           currentPrice,
+           g_structure);
    // 13. Update dashboard (DEBUG: disabled)
    //BuildDashboardData(g_dashboard, g_structure, g_zones, g_zoneCount,
    //                   g_breaks, g_breakCount, g_entries, g_entryCount, g_trade);
    //DrawDashboard(g_dashboard);
 
-   // 14. Fire alerts (DEBUG: disabled)
-   //FireAlerts(g_entries, g_entryCount);
+   // 14. Two-stage alerts
+   FireAlerts(g_zones, g_zoneCount, g_structure,
+              g_liqEvents, g_liqEventCount,
+              g_breaks, g_breakCount,
+              g_candleSignals, g_candleSignalCount,
+              g_rates, currentPrice);
 
    return rates_total;
   }

@@ -4,6 +4,8 @@
 #include "Constants.mqh"
 #include "Structures.mqh"
 #include "CandlePatterns.mqh"
+#include "Trendlines.mqh"
+#include "EntrySignals.mqh"
 #include "Inputs.mqh"
 
 //=============================================================================
@@ -174,7 +176,7 @@ void DrawArrow(string name, datetime time, double price,
 void DeleteObjectAndSubs(string name)
   {
    if(ObjectFind(0, name) >= 0) ObjectDelete(0, name);
-   string subs[] = {"_lbl","_ref","_steep","_sl","_tp","_big","_top","_bot","_reflbl"};
+   string subs[] = {"_lbl","_ref","_steep","_sl","_tp","_big","_top","_bot","_reflbl","_legend"};
    for(int s = 0; s < ArraySize(subs); s++)
      {
       string sub = name + subs[s];
@@ -246,8 +248,36 @@ void CleanupStaleObjects(string prefix, int currentCount, int &prevCount)
 //=============================================================================
 // 6. DrawZones
 //=============================================================================
-void DrawZones(PriceZone &zones[], int zoneCount, double currentPrice)
+void DrawZones(PriceZone &zones[], int zoneCount, double currentPrice,
+               const StructureState &structure[],
+               const LiquidityEvent &liqEvents[], int liqEventCount,
+               const StructureBreak &breaks[], int breakCount,
+               const CandleSignal &candleSignals[], int candleSignalCount)
   {
+   // --- Evaluate steps 1-5 once (global checks) ---
+   ENUM_ENTRY_DIR biasDir;
+   bool step1 = CheckD1Bias(structure[0], biasDir);
+
+   datetime since = TimeCurrent() - 24 * 3600;
+   bool step3 = step1 && CheckLiquiditySweep(liqEvents, liqEventCount, biasDir, since);
+   bool step4 = step1 && CheckM15BOS(breaks, breakCount, biasDir, since);
+
+   // DEBUG: log every zone in the array
+   for(int z = 0; z < zoneCount; z++)
+     {
+      string stateStr = "?";
+      if(zones[z].state == ZONE_ACTIVE)    stateStr = "ACTIVE";
+      if(zones[z].state == ZONE_FADED)     stateStr = "FADED";
+      if(zones[z].state == ZONE_MITIGATED) stateStr = "MITIGATED";
+      string typeStr = (zones[z].zoneType == ZONE_DEMAND) ? "DEMAND" : "SUPPLY";
+      PrintFormat("PAZ ZONE[%d]: %s %s %s | %.5f - %.5f | Q:%d | touches:%d | vis:%s",
+                  z, TFShortName(zones[z].tf), typeStr, stateStr,
+                  zones[z].lower, zones[z].upper, zones[z].quality, zones[z].touchCount,
+                  IsTFVisible(zones[z].tf) ? "YES" : "NO");
+     }
+   PrintFormat("PAZ SUMMARY: %d total zones, chart=%s, price=%.5f",
+               zoneCount, EnumToString(Period()), currentPrice);
+
    datetime rightEdge = TimeCurrent() + 5 * PeriodSeconds(PERIOD_D1);
 
    // Collect names drawn this cycle for stale cleanup
@@ -302,22 +332,25 @@ void DrawZones(PriceZone &zones[], int zoneCount, double currentPrice)
       drawnNames[drawnCount] = baseName;
       drawnCount++;
 
-      // --- Style: active = dotted border, faded = thinner + muted color ---
+      // --- Style: active = dotted, faded = dashed + muted ---
       color borderClr;
       int   fontSize;
+      ENUM_LINE_STYLE lineStyle;
       if(isFaded)
         {
-         borderClr = isDemand ? C'50,90,120' : C'140,65,65';  // muted versions
-         fontSize  = 8;
+         borderClr = isDemand ? C'50,90,120' : C'140,65,65';
+         fontSize  = 6;
+         lineStyle = STYLE_DASH;
         }
       else
         {
          borderClr = isDemand ? CLR_DEMAND_ACTIVE : CLR_SUPPLY_ACTIVE;
          fontSize  = 10;
+         lineStyle = STYLE_DOT;
         }
 
       DrawRectangle(baseName, zones[i].timeCreated, zones[i].upper,
-                    rightEdge, zones[i].lower, borderClr, 1, STYLE_DOT, false);
+                    rightEdge, zones[i].lower, borderClr, 1, lineStyle, false);
 
       // --- Label ---
       string zoneLabel = isDemand ? "BUY ZONE" : "SELL ZONE";
@@ -327,18 +360,66 @@ void DrawZones(PriceZone &zones[], int zoneCount, double currentPrice)
       DrawText(bigLblName, zones[i].timeCreated, zoneMidPrice,
                fullLabel, borderClr, fontSize, ANCHOR_LEFT);
 
-      // --- Refined zone: filled entry area (active zones only, not faded) ---
+      // --- Refined entry box: always shown, with checklist legend ---
       if(!isFaded && zones[i].refinedUpper != 0.0 && zones[i].refinedLower != 0.0)
         {
-         color refClr = isDemand ? CLR_DEMAND_REFINED : CLR_SUPPLY_REFINED;
+         // Evaluate per-zone checks
+         // Step 2: zone aligns with bias direction
+         bool step2 = false;
+         if(step1)
+           {
+            if(biasDir == ENTRY_BUY && isDemand) step2 = true;
+            if(biasDir == ENTRY_SELL && !isDemand) step2 = true;
+           }
+
+         // Step 5: candle pattern at this zone
+         bool step5 = false;
+         for(int s = candleSignalCount - 1; s >= 0; s--)
+           {
+            if(candleSignals[s].time < since) break;
+            if(!candleSignals[s].atKeyLevel) continue;
+            double sigPrice = candleSignals[s].price;
+            if(sigPrice >= zones[i].lower && sigPrice <= zones[i].upper)
+              {
+               if(step1)
+                 {
+                  bool patternMatchesBias =
+                     (biasDir == ENTRY_BUY && IsPatternBullish(candleSignals[s].pattern)) ||
+                     (biasDir == ENTRY_SELL && !IsPatternBullish(candleSignals[s].pattern));
+                  if(patternMatchesBias) { step5 = true; break; }
+                 }
+              }
+           }
+
+         int passed = (step1?1:0) + (step2?1:0) + (step3?1:0) + (step4?1:0) + (step5?1:0);
+
+         // Box color by readiness
+         color refClr;
+         if(passed == 5)      refClr = C'50,205,50';   // Green — all conditions met
+         else if(passed >= 3) refClr = C'255,215,0';   // Gold — getting close
+         else                 refClr = C'100,100,100';  // Gray — not ready
+
          string refName = baseName + "_ref";
          DrawRectangle(refName, zones[i].timeCreated, zones[i].refinedUpper,
                        rightEdge, zones[i].refinedLower, refClr, 1, STYLE_SOLID, true);
 
+         // ENTRY label with score
          string refLblName = baseName + "_reflbl";
          double refMid = (zones[i].refinedUpper + zones[i].refinedLower) / 2.0;
+         string entryLabel = "ENTRY " + IntegerToString(passed) + "/5";
+         color  entryTxtClr = (passed == 5) ? C'0,40,0' : C'26,26,26';
          DrawText(refLblName, zones[i].timeCreated, refMid,
-                  "ENTRY", refClr, 7, ANCHOR_LEFT);
+                  entryLabel, entryTxtClr, 8, ANCHOR_LEFT);
+
+         // Checklist legend below entry label
+         string legendName = baseName + "_legend";
+         string legend = (step1?"D1+":"D1-") + " " +
+                         (step2?"ZN+":"ZN-") + " " +
+                         (step3?"SW+":"SW-") + " " +
+                         (step4?"BOS+":"BOS-") + " " +
+                         (step5?"CP+":"CP-");
+         DrawText(legendName, zones[i].timeCreated, zones[i].refinedLower,
+                  legend, refClr, 6, ANCHOR_LEFT_UPPER);
         }
      }
 
@@ -386,13 +467,9 @@ void DrawStructureBreaks(const StructureBreak &breaks[], int breakCount)
 
       string baseName = OBJ_PREFIX + "BRK_" + IntegerToString(i);
 
-      // Dashed horizontal line at break level
-      DrawHLine(baseName, breaks[i].level, clr, 1, STYLE_DASH);
-
-      // Text label
-      string lblName = baseName + "_lbl";
+      // Label only — no dashed line
       string label = typeStr + " " + DoubleToString(breaks[i].level, (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS));
-      DrawText(lblName, breaks[i].time, breaks[i].level, label, clr, 7, ANCHOR_LEFT_LOWER);
+      DrawText(baseName, breaks[i].time, breaks[i].level, label, clr, 8, ANCHOR_LEFT_LOWER);
      }
   }
 
@@ -631,11 +708,17 @@ void DrawAll(PriceZone          &zones[],         int zoneCount,
              const KeyLevel      &keyLevels[],     int keyLevelCount,
              EntrySignal         &entries[],        int entryCount,
              const TradeState    &trade,
-             double              currentPrice)
+             double              currentPrice,
+             const StructureState &structure[])
   {
-   // DEBUG: zones only — enable layers one by one for validation
-   DrawZones(zones, zoneCount, currentPrice);
-   //DrawStructureBreaks(breaks, breakCount);
+   // Zones with entry checklist (steps 1-5)
+   DrawZones(zones, zoneCount, currentPrice,
+             structure, liqEvents, liqEventCount,
+             breaks, breakCount, candleSignals, candleSignalCount);
+
+   // BOS/CHoCH on M15 (visible confirmation for step 4)
+   DrawStructureBreaks(breaks, breakCount);
+
    //DrawTrendlines(lines, lineCount);
    //DrawCandlePatterns(candleSignals, candleSignalCount);
    //DrawLiquidityEvents(liqEvents, liqEventCount);

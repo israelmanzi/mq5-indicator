@@ -13,5 +13,8 @@ docs/superpowers/
 .DS_Store
 Thumbs.db
 
+# Build output
+out.zip
+
 # Old files
 support_and_resistance.mq5

@@ -71,6 +71,10 @@ bool CheckLiquiditySweep(const LiquidityEvent &events[], int eventCount,
       if(events[i].time < since)
          break;
 
+      // Only H1 sweeps count for entry confirmation
+      if(events[i].tf != PERIOD_H1)
+         continue;
+
       if(dir == ENTRY_BUY && events[i].isBullish)
          return true;
       if(dir == ENTRY_SELL && !events[i].isBullish)

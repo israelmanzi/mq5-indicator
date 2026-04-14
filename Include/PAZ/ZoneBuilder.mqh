@@ -262,6 +262,7 @@ void UpdateZoneMitigation(PriceZone &zones[], int &zoneCount,
            {
             zones[i].state         = ZONE_MITIGATED;
             zones[i].timeMitigated = rates[barIdx].time;
+            AddToGraveyard(zones[i]);
            }
          // Touch: low entered the zone but close stayed above lower
          else if(barLow <= zones[i].upper && barClose >= zones[i].lower)
@@ -276,6 +277,7 @@ void UpdateZoneMitigation(PriceZone &zones[], int &zoneCount,
            {
             zones[i].state         = ZONE_MITIGATED;
             zones[i].timeMitigated = rates[barIdx].time;
+            AddToGraveyard(zones[i]);
            }
          // Touch: high entered the zone but close stayed below upper
          else if(barHigh >= zones[i].lower && barClose <= zones[i].upper)
@@ -385,6 +387,8 @@ void EnforceZoneCap(PriceZone &zones[], int &zoneCount,
 bool ZoneAlreadyExists(const PriceZone &zones[], int zoneCount,
                        const PriceZone &candidate, double tolerance)
   {
+   // Check against ALL zones including mitigated — prevents re-detection
+   // of the same price area after it's been broken
    for(int i = 0; i < zoneCount; i++)
      {
       if(zones[i].tf != candidate.tf)
@@ -396,6 +400,40 @@ bool ZoneAlreadyExists(const PriceZone &zones[], int zoneCount,
          return true;
      }
    return false;
+  }
+
+//=============================================================================
+// Mitigated zone graveyard — remembers broken zones so they aren't re-detected
+//=============================================================================
+PriceZone g_mitigatedGraveyard[];
+int       g_mitigatedGraveyardCount = 0;
+
+bool ZoneInGraveyard(const PriceZone &candidate, double tolerance)
+  {
+   for(int i = 0; i < g_mitigatedGraveyardCount; i++)
+     {
+      if(g_mitigatedGraveyard[i].tf != candidate.tf) continue;
+      if(g_mitigatedGraveyard[i].zoneType != candidate.zoneType) continue;
+      if(MathAbs(g_mitigatedGraveyard[i].upper - candidate.upper) < tolerance &&
+         MathAbs(g_mitigatedGraveyard[i].lower - candidate.lower) < tolerance)
+         return true;
+     }
+   return false;
+  }
+
+void AddToGraveyard(const PriceZone &zone)
+  {
+   // Cap graveyard at 100 to prevent unbounded growth
+   if(g_mitigatedGraveyardCount >= 100)
+     {
+      // Shift oldest out
+      for(int i = 0; i < g_mitigatedGraveyardCount - 1; i++)
+         g_mitigatedGraveyard[i] = g_mitigatedGraveyard[i + 1];
+      g_mitigatedGraveyardCount--;
+     }
+   ArrayResize(g_mitigatedGraveyard, g_mitigatedGraveyardCount + 1);
+   g_mitigatedGraveyard[g_mitigatedGraveyardCount] = zone;
+   g_mitigatedGraveyardCount++;
   }
 
 //=============================================================================
@@ -501,7 +539,8 @@ void DetectZones(const MTFRates &ratesCache, PriceZone &zones[], int &zoneCount,
       // Try demand zone
       if(DetectDemandZone(ratesCache.rates, total, i, atr, candidate, tf))
         {
-         if(!ZoneAlreadyExists(zones, zoneCount, candidate, tolerance))
+         if(!ZoneAlreadyExists(zones, zoneCount, candidate, tolerance) &&
+            !ZoneInGraveyard(candidate, tolerance))
            {
             // Check if zone caused a BOS
             bool causedBOS = false;
@@ -535,7 +574,8 @@ void DetectZones(const MTFRates &ratesCache, PriceZone &zones[], int &zoneCount,
       // Try supply zone
       if(DetectSupplyZone(ratesCache.rates, total, i, atr, candidate, tf))
         {
-         if(!ZoneAlreadyExists(zones, zoneCount, candidate, tolerance))
+         if(!ZoneAlreadyExists(zones, zoneCount, candidate, tolerance) &&
+            !ZoneInGraveyard(candidate, tolerance))
            {
             bool causedBOS = false;
             for(int b = 0; b < breakCount; b++)
@@ -571,48 +611,57 @@ void DetectZones(const MTFRates &ratesCache, PriceZone &zones[], int &zoneCount,
 // UpdateAllZones
 // Master function: detect, mitigate, fade, cleanup, cap, and refine zones.
 //=============================================================================
+// Track last bar times to detect new bars (trigger re-detection only then)
+datetime g_lastBarTime[4] = {0, 0, 0, 0};
+
 void UpdateAllZones(const MTFRates &rates[], PriceZone &zones[], int &zoneCount,
                     const StructureBreak &breaks[], int breakCount,
                     const StructureState &structure[])
   {
-   //--- Detect zones on D1, H4, H1 (skip M15; respect visibility toggles)
-   // TF_LIST: 0=D1, 1=H4, 2=H1, 3=M15
-   if(InpShowD1Zones && rates[0].count > 20)
-      DetectZones(rates[0], zones, zoneCount, breaks, breakCount, PERIOD_D1);
-
-   if(InpShowH4Zones && rates[1].count > 20)
-      DetectZones(rates[1], zones, zoneCount, breaks, breakCount, PERIOD_H4);
-
-   if(InpShowH1Zones && rates[2].count > 20)
-      DetectZones(rates[2], zones, zoneCount, breaks, breakCount, PERIOD_H1);
-
-   //--- Update mitigation for all active TFs
-   for(int i = 0; i < 3; i++) // D1, H4, H1
+   //--- Detect zones ONLY when a new bar forms on that timeframe
+   for(int t = 0; t < 3; t++) // D1=0, H4=1, H1=2
      {
-      if(rates[i].count > 2)
+      if(rates[t].count < 20) continue;
+
+      // Check visibility toggle
+      if(t == 0 && !InpShowD1Zones) continue;
+      if(t == 1 && !InpShowH4Zones) continue;
+      if(t == 2 && !InpShowH1Zones) continue;
+
+      // New bar check: last bar time changed
+      datetime currentBarTime = rates[t].rates[rates[t].count - 1].time;
+      if(currentBarTime != g_lastBarTime[t])
         {
-         UpdateZoneMitigation(zones, zoneCount, rates[i].rates, rates[i].count,
-                              TF_LIST[i]);
+         g_lastBarTime[t] = currentBarTime;
+         DetectZones(rates[t], zones, zoneCount, breaks, breakCount, TF_LIST[t]);
         }
      }
 
-   //--- Update fading for all zones (time-based)
-   UpdateZoneFading(zones, zoneCount);
+   //--- State updates run every cycle (cheap, no flicker risk)
 
-   //--- Cleanup mitigated/faded zones for each TF
+   // Update mitigation
    for(int i = 0; i < 3; i++)
      {
       if(rates[i].count > 2)
-         CleanupMitigatedZones(zones, zoneCount, rates[i].rates, rates[i].count,
-                               TF_LIST[i]);
+         UpdateZoneMitigation(zones, zoneCount, rates[i].rates, rates[i].count, TF_LIST[i]);
      }
 
-   //--- Enforce zone cap per TF
+   // Update fading
+   UpdateZoneFading(zones, zoneCount);
+
+   // Cleanup old mitigated zones
+   for(int i = 0; i < 3; i++)
+     {
+      if(rates[i].count > 2)
+         CleanupMitigatedZones(zones, zoneCount, rates[i].rates, rates[i].count, TF_LIST[i]);
+     }
+
+   // Enforce cap
    EnforceZoneCap(zones, zoneCount, PERIOD_D1, InpMaxZonesPerTF);
    EnforceZoneCap(zones, zoneCount, PERIOD_H4, InpMaxZonesPerTF);
    EnforceZoneCap(zones, zoneCount, PERIOD_H1, InpMaxZonesPerTF);
 
-   //--- Refine H1 zones using M15 data (index 3 in rates[])
+   // Refine H1 zones using M15 data
    if(rates[3].count > 0)
      {
       for(int i = 0; i < zoneCount; i++)
