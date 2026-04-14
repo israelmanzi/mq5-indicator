@@ -182,8 +182,46 @@ void DeleteObjectAndSubs(string name)
      }
   }
 
-// Track previous counts to only cleanup when counts shrink
-int g_prevZoneDrawn    = 0;
+// Stable name tracking: names drawn last cycle vs this cycle
+string g_prevZoneNames[];
+int    g_prevZoneNameCount = 0;
+
+//+------------------------------------------------------------------+
+//| Build a stable object name from zone identity                     |
+//| Format: PAZ_Zone_DM_H1_1711382400                                |
+//+------------------------------------------------------------------+
+string ZoneObjName(const PriceZone &zone)
+  {
+   string typeStr = (zone.zoneType == ZONE_DEMAND) ? "DM" : "SP";
+   string tfStr   = TFShortName(zone.tf);
+   return OBJ_PREFIX + "Zone_" + typeStr + "_" + tfStr + "_" +
+          IntegerToString((long)zone.timeCreated);
+  }
+
+//+------------------------------------------------------------------+
+//| Remove zone objects that were drawn last cycle but not this one   |
+//+------------------------------------------------------------------+
+void CleanupStaleZones(const string &currentNames[], int currentCount)
+  {
+   for(int p = 0; p < g_prevZoneNameCount; p++)
+     {
+      bool stillExists = false;
+      for(int c = 0; c < currentCount; c++)
+        {
+         if(g_prevZoneNames[p] == currentNames[c])
+           { stillExists = true; break; }
+        }
+      if(!stillExists)
+         DeleteObjectAndSubs(g_prevZoneNames[p]);
+     }
+   // Store current as previous for next cycle
+   ArrayResize(g_prevZoneNames, currentCount);
+   g_prevZoneNameCount = currentCount;
+   for(int i = 0; i < currentCount; i++)
+      g_prevZoneNames[i] = currentNames[i];
+  }
+
+// Index-based cleanup for non-zone objects (still used by other draw functions)
 int g_prevBreakDrawn   = 0;
 int g_prevTLDrawn      = 0;
 int g_prevCPDrawn      = 0;
@@ -194,7 +232,6 @@ int g_prevEntDrawn     = 0;
 
 void CleanupStaleObjects(string prefix, int currentCount, int &prevCount)
   {
-   // Only delete objects when count has shrunk
    if(currentCount < prevCount)
      {
       for(int i = currentCount; i < prevCount; i++)
@@ -203,6 +240,7 @@ void CleanupStaleObjects(string prefix, int currentCount, int &prevCount)
          DeleteObjectAndSubs(name);
         }
      }
+   prevCount = currentCount;
   }
 
 //=============================================================================
@@ -210,25 +248,17 @@ void CleanupStaleObjects(string prefix, int currentCount, int &prevCount)
 //=============================================================================
 void DrawZones(PriceZone &zones[], int zoneCount, double currentPrice)
   {
-   // DEBUG: log zone counts per TF
-   int cntD1=0, cntH4=0, cntH1=0;
-   for(int z=0; z<zoneCount; z++)
-     {
-      if(zones[z].tf==PERIOD_D1) cntD1++;
-      if(zones[z].tf==PERIOD_H4) cntH4++;
-      if(zones[z].tf==PERIOD_H1) cntH1++;
-     }
-   PrintFormat("PAZ DEBUG: Zones total=%d (D1=%d H4=%d H1=%d) ChartTF=%s Price=%.5f",
-               zoneCount, cntD1, cntH4, cntH1, EnumToString(Period()), currentPrice);
-
-   CleanupStaleObjects(OBJ_PREFIX + "Zone_", zoneCount, g_prevZoneDrawn);
    datetime rightEdge = TimeCurrent() + 5 * PeriodSeconds(PERIOD_D1);
+
+   // Collect names drawn this cycle for stale cleanup
+   string drawnNames[];
+   int    drawnCount = 0;
 
    // If InpNearestZones > 0, only show N nearest zones above and below price
    int drawnAbove = 0, drawnBelow = 0;
    int maxPerSide = (InpNearestZones > 0) ? InpNearestZones : 9999;
 
-   // Sort indices by distance to current price (simple selection for small arrays)
+   // Sort indices by distance to current price
    int order[];
    ArrayResize(order, zoneCount);
    for(int i = 0; i < zoneCount; i++) order[i] = i;
@@ -241,9 +271,7 @@ void DrawZones(PriceZone &zones[], int zoneCount, double currentPrice)
          double distJ = MathMin(MathAbs(currentPrice - zones[order[j]].upper),
                                 MathAbs(currentPrice - zones[order[j]].lower));
          if(distJ < distI)
-           {
-            int tmp = order[i]; order[i] = order[j]; order[j] = tmp;
-           }
+           { int tmp = order[i]; order[i] = order[j]; order[j] = tmp; }
         }
      }
 
@@ -251,9 +279,8 @@ void DrawZones(PriceZone &zones[], int zoneCount, double currentPrice)
      {
       int i = order[idx];
 
-      // Skip zones whose TF visibility is toggled off
-      if(!IsTFVisible(zones[i].tf))
-         continue;
+      if(!IsTFVisible(zones[i].tf))        continue;
+      if(zones[i].state == ZONE_MITIGATED) continue; // skip broken zones
 
       // Nearest-zone filter
       if(InpNearestZones > 0)
@@ -265,44 +292,58 @@ void DrawZones(PriceZone &zones[], int zoneCount, double currentPrice)
            { if(drawnBelow >= maxPerSide) continue; drawnBelow++; }
         }
 
-      // Only draw ACTIVE zones — skip mitigated and faded for now
-      if(zones[i].state != ZONE_ACTIVE)
-         continue;
-
       bool isDemand = (zones[i].zoneType == ZONE_DEMAND);
-      string baseName = OBJ_PREFIX + "Zone_" + IntegerToString(i);
+      bool isFaded  = (zones[i].state == ZONE_FADED);
+      string baseName = ZoneObjName(zones[i]);
       zones[i].objName = baseName;
 
-      // --- Outer zone: subtle border, no fill ---
-      color borderClr = isDemand ? CLR_DEMAND_ACTIVE : CLR_SUPPLY_ACTIVE;
+      // Track this name
+      ArrayResize(drawnNames, drawnCount + 1);
+      drawnNames[drawnCount] = baseName;
+      drawnCount++;
+
+      // --- Style: active = dotted border, faded = thinner + muted color ---
+      color borderClr;
+      int   fontSize;
+      if(isFaded)
+        {
+         borderClr = isDemand ? C'50,90,120' : C'140,65,65';  // muted versions
+         fontSize  = 8;
+        }
+      else
+        {
+         borderClr = isDemand ? CLR_DEMAND_ACTIVE : CLR_SUPPLY_ACTIVE;
+         fontSize  = 10;
+        }
+
       DrawRectangle(baseName, zones[i].timeCreated, zones[i].upper,
                     rightEdge, zones[i].lower, borderClr, 1, STYLE_DOT, false);
 
-      // --- Label: "BUY ZONE" or "SELL ZONE" + TF ---
+      // --- Label ---
       string zoneLabel = isDemand ? "BUY ZONE" : "SELL ZONE";
       string fullLabel = zoneLabel + "  " + TFShortName(zones[i].tf);
       string bigLblName = baseName + "_big";
       double zoneMidPrice = (zones[i].upper + zones[i].lower) / 2.0;
-      color  labelClr = isDemand ? CLR_DEMAND_ACTIVE : CLR_SUPPLY_ACTIVE;
       DrawText(bigLblName, zones[i].timeCreated, zoneMidPrice,
-               fullLabel, labelClr, 10, ANCHOR_LEFT);
+               fullLabel, borderClr, fontSize, ANCHOR_LEFT);
 
-      // --- Refined zone: filled, this is the actual entry area ---
-      if(zones[i].refinedUpper != 0.0 && zones[i].refinedLower != 0.0)
+      // --- Refined zone: filled entry area (active zones only, not faded) ---
+      if(!isFaded && zones[i].refinedUpper != 0.0 && zones[i].refinedLower != 0.0)
         {
          color refClr = isDemand ? CLR_DEMAND_REFINED : CLR_SUPPLY_REFINED;
          string refName = baseName + "_ref";
          DrawRectangle(refName, zones[i].timeCreated, zones[i].refinedUpper,
                        rightEdge, zones[i].refinedLower, refClr, 1, STYLE_SOLID, true);
 
-         // Small label on refined zone
          string refLblName = baseName + "_reflbl";
          double refMid = (zones[i].refinedUpper + zones[i].refinedLower) / 2.0;
-         string refLabel = isDemand ? "ENTRY" : "ENTRY";
          DrawText(refLblName, zones[i].timeCreated, refMid,
-                  refLabel, refClr, 7, ANCHOR_LEFT);
+                  "ENTRY", refClr, 7, ANCHOR_LEFT);
         }
      }
+
+   // Remove zones that were drawn last cycle but not this one
+   CleanupStaleZones(drawnNames, drawnCount);
   }
 
 //=============================================================================

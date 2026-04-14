@@ -1,77 +1,95 @@
 # PriceActionZones — MT5 Indicator
 
-A pure price action indicator for MetaTrader 5 that identifies high-probability trading zones, market structure, and entry signals across multiple timeframes. No lagging indicators — only raw price data.
+A pure price action indicator for MetaTrader 5. No lagging indicators, no moving averages — only raw price structure, supply/demand zones, and multi-timeframe analysis from Daily down to M15.
 
-## What This Indicator Does
+## What You See on the Chart
 
-PriceActionZones performs **top-down multi-timeframe analysis** from Daily down to M15, automatically identifying:
+The indicator is designed for a **clean chart by default**. You see only what helps you make a decision right now. Additional layers can be toggled on when you need them.
 
-### Market Structure
-- **Swing highs and lows** with labels (HH, HL, LH, LL) on all timeframes
-- **Trend direction** derived from swing point sequences — not moving averages
-- **Break of Structure (BOS)** and **Change of Character (CHoCH)** on M15 for precise entry confirmation
+### Default View (always on)
 
-### Supply and Demand Zones
-- Automatically detects valid **demand zones** (buy areas) and **supply zones** (sell areas) on D1, H4, and H1
-- Each zone is **scored 0-10** based on departure strength, freshness, whether it caused a BOS, base candle count, and higher-timeframe confluence
-- Only zones scoring above your threshold are displayed — no clutter
-- **Zone refinement**: H1 zones are automatically refined using M15 data for tighter entries
-- Zones are tracked as they age: fresh zones are highlighted, mitigated zones fade to muted colors
+**Buy Zones** — Dotted blue rectangle outline with "BUY ZONE H1" label. This is where price previously dropped, paused, and shot upward. Expect buyers to step in here again.
 
-### Candlestick Patterns
-- Detects key reversal patterns: **engulfing, pin bar (hammer/shooting star), morning/evening star**
-- Continuation patterns: **inside bar, three white soldiers / three black crows**
-- Context patterns: **doji at key levels, tweezer tops/bottoms**
-- Patterns are **only displayed when they occur at a key level** (zone, trendline, or structure level) — not random noise in the middle of a range
+**Sell Zones** — Dotted red rectangle outline with "SELL ZONE H4" label. This is where price previously rallied, stalled, and dropped. Expect sellers to push price down here.
 
-### Liquidity Analysis
-- Identifies **equal highs and equal lows** — these are liquidity pools where stop losses cluster
-- Detects **liquidity sweeps** — when price spikes beyond a key level and reverses, signaling that stops were hunted before the real move
+**Entry Boxes** — Bright filled rectangle inside a zone labeled "ENTRY". This is the M15-refined precision area within the larger zone. Your actual entry point.
 
-### Trendlines
-- Auto-drawn by connecting swing points (higher lows for uptrend, lower highs for downtrend)
-- Tracks **breaks and retests** — when a trendline breaks and price returns to test the other side, the indicator flags it
-- Steep trendlines (>80 degrees) are marked as unreliable
+**Faded Zones** — Muted, smaller-font version of the above. These zones are old but still unmitigated (price never broke through). They may still hold, but treat with less conviction than fresh zones.
 
-### Key Levels
-- Horizontal levels where price has reacted **3 or more times** across multiple timeframes
-- Psychological round numbers are automatically detected
-- These serve as TP targets and confluence points
+Mitigated zones (price already broke through) are hidden — they no longer matter.
+
+### Smart Timeframe Filtering
+
+Zones auto-filter based on the chart you're viewing:
+
+| Chart Timeframe | Zones Shown |
+|---|---|
+| D1 | D1 only |
+| H4 | D1 + H4 |
+| H1 | H4 + H1 |
+| M15 | H1 only |
+
+No manual switching needed. Switch timeframes and the relevant zones appear.
+
+### Optional Layers (toggle in settings)
+
+These are OFF by default to keep the chart clean. Enable them under **Visual Layers** in the indicator settings:
+
+| Layer | What it shows |
+|---|---|
+| BOS/CHoCH | Break of Structure and Change of Character lines on M15 — confirms trend continuation or reversal |
+| Trendlines | Auto-drawn from swing points on H4/H1, with break and retest detection |
+| Candle Pattern Labels | Text labels ("BullEng", "Hammer", etc.) at key levels only |
+| Liquidity Sweep Markers | Arrows marking where stops were hunted before a reversal |
+| Equal Highs/Lows | Dotted lines at liquidity pools where stop losses cluster |
+| Key Levels | Multi-touch horizontal levels across timeframes |
 
 ### Entry Signals
-The indicator only marks an entry when **all conditions align**:
 
-1. D1 trend bias is clear (bullish or bearish)
-2. Price is at an H4/H1 supply or demand zone aligned with the bias
-3. A liquidity sweep has occurred (stops were grabbed)
-4. M15 shows a BOS in the trade direction
-5. A candlestick pattern confirms at the key level
+When enabled, the indicator marks entries only when **all 7 conditions align**:
+
+1. D1 trend bias is clear
+2. Price is at an H4/H1 zone aligned with the trend
+3. A liquidity sweep occurred (stops grabbed)
+4. M15 confirms with a BOS in the trade direction
+5. A candlestick pattern appears at the key level
 6. A confirmation candle closes beyond the signal candle
-7. Risk-to-reward meets your minimum threshold (default 1:2)
+7. Reward-to-risk meets the minimum threshold (default 1:2)
 
-Entry types include **zone taps**, **breakout and retest**, **double tops**, and **double bottoms**.
+Entry types: zone taps, breakout and retest, double tops, double bottoms.
 
 ### Trade Management
-- **SL** placed behind the trigger zone with a spread buffer
+
+After an entry signal fires:
+- **SL** placed behind the trigger zone
 - **TP** targets the next opposing zone or key level
-- **Breakeven**: SL moves to entry price when 1:1 R:R is reached
-- **Trailing SL**: automatically trails to each new swing point as price moves in your favor
+- **Breakeven** at 1:1 — SL moves to entry price
+- **Trailing SL** follows new M15 swing points as price moves in your favor
 
 ### Dashboard
-An on-chart panel displays:
-- Current D1, H4, and H1 bias
-- Number of active zones
-- Last BOS and CHoCH events
-- Current trade status and R:R
+
+A compact panel showing:
+- D1/H4/H1 bias at a glance (+ bullish, - bearish, = ranging)
+- Current trade status
+- Active zone count
+
+## How to Read It
+
+1. **Check the bias** — are the higher timeframes aligned? D1+ H4+ means look for buys only
+2. **Watch the zones** — is price approaching a BUY ZONE from above? That's your area of interest
+3. **Drop to M15** — look for BOS confirmation and a candle pattern at the zone
+4. **Wait for the arrow** — if entry signals are enabled, the green/red arrow means the checklist passed
+5. **SL and TP are mapped** — the tomato line is your stop, the green line is your target
 
 ## Color Guide
 
 | Element | Color |
-|---------|-------|
-| Demand zones (buy areas) | Steel Blue |
-| Supply zones (sell areas) | Indian Red |
-| Refined zones | Brighter blue / salmon |
-| Mitigated zones | Dark muted colors, dashed |
+|---|---|
+| Buy zone outline | Steel Blue |
+| Sell zone outline | Indian Red |
+| Buy entry box (refined) | Bright Blue |
+| Sell entry box (refined) | Salmon |
+| Faded zone | Muted darker version |
 | BOS (bullish) | Dodger Blue |
 | BOS (bearish) | Coral |
 | CHoCH | Gold |
@@ -79,57 +97,39 @@ An on-chart panel displays:
 | Stop Loss | Tomato |
 | Take Profit | Sea Green |
 | Liquidity sweep | Magenta |
-| Equal highs/lows | Orange dotted |
-| Buy entry | Lime arrow |
-| Sell entry | Red arrow |
+| Equal highs/lows | Orange |
+| Buy entry arrow | Lime |
+| Sell entry arrow | Red |
 
 ## Settings
 
-All parameters are configurable from the indicator settings panel:
+All configurable from the indicator properties panel:
 
-**Swing Points** — Lookback period per timeframe (D1, H4, H1, M15). Higher = fewer but more significant swings.
+**Swing Points** — Lookback bars per timeframe (D1=5, H4=3, H1=3, M15=2). Higher = fewer, more significant swings.
 
-**Zones** — Max active zones per timeframe (default 5), minimum quality score (default 5/10), fade timing, mitigated zone visibility duration.
+**Zones** — Max active zones per TF (default 5), minimum quality score (default 5/10), fade timing, mitigated zone visibility.
 
-**Entry Signals** — Minimum reward-to-risk ratio (default 1:2, set to 0 to disable filtering).
+**Entry Signals** — Minimum R:R ratio (default 1:2).
 
 **Alerts** — Toggle push notifications, sound alerts, and visual markers independently.
 
-**Timeframe Display** — Toggle D1, H4, H1 zones and M15 BOS/CHoCH on or off.
+**Timeframe Display** — Toggle D1, H4, H1 zones and M15 BOS/CHoCH.
 
-**Dashboard** — Toggle the info panel and choose which corner it appears in.
+**Visual Layers** — Toggle trendlines, candle labels, liquidity markers, equal highs/lows, key levels. All OFF by default.
+
+**Nearest Zones** — How many zones to show above and below current price (default 3). Set to 0 for all.
+
+**Dashboard** — Toggle on/off, choose corner position.
 
 ## Installation
 
-1. Copy `PriceActionZones.mq5` and the `Include/PAZ/` folder into your MetaTrader 5 data directory
-2. Open MetaEditor, navigate to the file, and compile (F7)
-3. Attach the indicator to any chart
-4. Configure your preferred settings
-
-See the **Compilation Guide** section below for detailed setup.
-
-## Compilation Guide
-
-### Option 1: Compile from MetaEditor (Recommended)
-
-1. Open MetaTrader 5
-2. Press **F4** to open MetaEditor
-3. In MetaEditor, go to **File > Open** and navigate to `PriceActionZones.mq5`
-4. Press **F7** (or click the Compile button) to compile
-5. If successful, you'll see "0 errors, 0 warnings" in the output panel
-6. Switch back to MetaTrader 5 — the indicator appears under **Insert > Indicators > Custom**
-
-### Option 2: Compile from MetaEditor Command Line
-
-```
-MetaEditor64.exe /compile:"C:\path\to\PriceActionZones.mq5" /log
-```
-
-Check the MetaEditor log file for results.
+1. Copy `PriceActionZones.mq5` and the `Include/PAZ/` folder into your MT5 indicators directory
+2. Open MetaEditor (F4), open the file, compile (F7)
+3. Attach to any chart
 
 ### File Placement
 
-For MetaEditor to resolve the `Include/PAZ/` directory correctly, place the files so that the structure looks like this inside your MT5 data folder:
+Place files inside your MT5 data folder (find it via **File > Open Data Folder** in MT5):
 
 ```
 MQL5/
@@ -154,19 +154,13 @@ MQL5/
         Dashboard.mqh
 ```
 
-To find your MT5 data folder: in MetaTrader 5, go to **File > Open Data Folder**.
+### Linux (Bottles/Wine)
 
-## Recommended Usage
-
-- **Attach to H1 chart** as your primary working timeframe
-- The indicator reads D1, H4, H1, and M15 data automatically regardless of which chart you're viewing
-- Switch to M15 to see BOS/CHoCH confirmation details
-- Wait for the full checklist to pass before entering — the indicator does the discipline for you
-- Use the dashboard to stay aware of the higher-timeframe bias at all times
+A `deploy.sh` script is included. Run `./deploy.sh` from the project directory to copy files to the MT5 indicators folder, then compile in MetaEditor.
 
 ## Disclaimer
 
-This indicator is a tool for analysis, not a trading system guarantee. Always apply your own judgment, manage your risk, and never risk more than you can afford to lose. Past price patterns do not guarantee future results.
+This is an analysis tool, not financial advice. Always manage your risk. Past price patterns do not guarantee future results.
 
 ## License
 
