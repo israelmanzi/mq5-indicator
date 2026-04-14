@@ -6,6 +6,7 @@
 #include "CandlePatterns.mqh"
 #include "Trendlines.mqh"
 #include "EntrySignals.mqh"
+#include "Alerts.mqh"
 #include "Inputs.mqh"
 
 //=============================================================================
@@ -262,22 +263,6 @@ void DrawZones(PriceZone &zones[], int zoneCount, double currentPrice,
    bool step3 = step1 && CheckLiquiditySweep(liqEvents, liqEventCount, biasDir, since);
    bool step4 = step1 && CheckM15BOS(breaks, breakCount, biasDir, since);
 
-   // DEBUG: log every zone in the array
-   for(int z = 0; z < zoneCount; z++)
-     {
-      string stateStr = "?";
-      if(zones[z].state == ZONE_ACTIVE)    stateStr = "ACTIVE";
-      if(zones[z].state == ZONE_FADED)     stateStr = "FADED";
-      if(zones[z].state == ZONE_MITIGATED) stateStr = "MITIGATED";
-      string typeStr = (zones[z].zoneType == ZONE_DEMAND) ? "DEMAND" : "SUPPLY";
-      PrintFormat("PAZ ZONE[%d]: %s %s %s | %.5f - %.5f | Q:%d | touches:%d | vis:%s",
-                  z, TFShortName(zones[z].tf), typeStr, stateStr,
-                  zones[z].lower, zones[z].upper, zones[z].quality, zones[z].touchCount,
-                  IsTFVisible(zones[z].tf) ? "YES" : "NO");
-     }
-   PrintFormat("PAZ SUMMARY: %d total zones, chart=%s, price=%.5f",
-               zoneCount, EnumToString(Period()), currentPrice);
-
    datetime rightEdge = TimeCurrent() + 5 * PeriodSeconds(PERIOD_D1);
 
    // Collect names drawn this cycle for stale cleanup
@@ -393,6 +378,14 @@ void DrawZones(PriceZone &zones[], int zoneCount, double currentPrice,
 
          int passed = (step1?1:0) + (step2?1:0) + (step3?1:0) + (step4?1:0) + (step5?1:0);
 
+         // Stage 1 alert when 5/5
+         if(passed == 5)
+           {
+            string alertDir = isDemand ? "BUY" : "SELL";
+            int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+            FireStage1Alert(_Symbol, alertDir, zones[i].lower, zones[i].upper, digits);
+           }
+
          // Box color by readiness
          color refClr;
          if(passed == 5)      refClr = C'50,205,50';   // Green — all conditions met
@@ -430,47 +423,74 @@ void DrawZones(PriceZone &zones[], int zoneCount, double currentPrice,
 //=============================================================================
 // 7. DrawStructureBreaks
 //=============================================================================
+// BOS/CHoCH stale name tracking
+string g_prevBreakNames[];
+int    g_prevBreakNameCount = 0;
+
+void CleanupStaleBreaks(const string &currentNames[], int currentCount)
+  {
+   for(int p = 0; p < g_prevBreakNameCount; p++)
+     {
+      bool stillExists = false;
+      for(int c = 0; c < currentCount; c++)
+        {
+         if(g_prevBreakNames[p] == currentNames[c])
+           { stillExists = true; break; }
+        }
+      if(!stillExists)
+         DeleteObjectAndSubs(g_prevBreakNames[p]);
+     }
+   ArrayResize(g_prevBreakNames, currentCount);
+   g_prevBreakNameCount = currentCount;
+   for(int i = 0; i < currentCount; i++)
+      g_prevBreakNames[i] = currentNames[i];
+  }
+
 void DrawStructureBreaks(const StructureBreak &breaks[], int breakCount)
   {
-   CleanupStaleObjects(OBJ_PREFIX + "BRK_", breakCount, g_prevBreakDrawn);
+   string drawnNames[];
+   int    drawnCount = 0;
 
    if(!InpShowM15BOS)
+     {
+      CleanupStaleBreaks(drawnNames, 0);
       return;
+     }
+
+   // Only draw recent breaks (last 24h) to cap volume
+   datetime since = TimeCurrent() - 24 * 3600;
 
    for(int i = 0; i < breakCount; i++)
      {
-      // Only draw M15 breaks
-      if(breaks[i].tf != PERIOD_M15)
-         continue;
+      if(breaks[i].tf != PERIOD_M15) continue;
+      if(breaks[i].time < since) continue;
 
       color  clr = CLR_DASH_TEXT;
       string typeStr = "";
 
       switch(breaks[i].breakType)
         {
-         case BREAK_BOS_BULL:
-            clr     = CLR_BOS_BULL;
-            typeStr = "BOS";
-            break;
-         case BREAK_BOS_BEAR:
-            clr     = CLR_BOS_BEAR;
-            typeStr = "BOS";
-            break;
+         case BREAK_BOS_BULL:  clr = CLR_BOS_BULL; typeStr = "BOS";   break;
+         case BREAK_BOS_BEAR:  clr = CLR_BOS_BEAR; typeStr = "BOS";   break;
          case BREAK_CHOCH_BULL:
-         case BREAK_CHOCH_BEAR:
-            clr     = CLR_CHOCH;
-            typeStr = "CHoCH";
-            break;
-         default:
-            continue;
+         case BREAK_CHOCH_BEAR: clr = CLR_CHOCH;   typeStr = "CHoCH"; break;
+         default: continue;
         }
 
-      string baseName = OBJ_PREFIX + "BRK_" + IntegerToString(i);
+      // Stable name: type + time
+      string baseName = OBJ_PREFIX + "BRK_" + typeStr + "_" +
+                        IntegerToString((long)breaks[i].time);
 
-      // Label only — no dashed line
-      string label = typeStr + " " + DoubleToString(breaks[i].level, (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS));
+      ArrayResize(drawnNames, drawnCount + 1);
+      drawnNames[drawnCount] = baseName;
+      drawnCount++;
+
+      string label = typeStr + " " + DoubleToString(breaks[i].level,
+                     (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS));
       DrawText(baseName, breaks[i].time, breaks[i].level, label, clr, 8, ANCHOR_LEFT_LOWER);
      }
+
+   CleanupStaleBreaks(drawnNames, drawnCount);
   }
 
 //=============================================================================
@@ -628,9 +648,6 @@ void DrawEntrySignals(EntrySignal &entries[], int entryCount)
   {
    CleanupStaleObjects(OBJ_PREFIX + "ENT_", entryCount, g_prevEntDrawn);
 
-   if(!InpAlertVisual)
-      return;
-
    for(int i = 0; i < entryCount; i++)
      {
       bool   isBuy = (entries[i].direction == ENTRY_BUY);
@@ -644,9 +661,13 @@ void DrawEntrySignals(EntrySignal &entries[], int entryCount)
       // Entry arrow, width 3
       DrawArrow(baseName, entries[i].signalTime, entries[i].entryPrice, arrow, clr, 3);
 
-      // Entry label: "BUY R:R 1:2.3" or "SELL R:R 1:1.5"
+      // Entry label
       string lblName = baseName + "_lbl";
-      string label = dir + " R:R 1:" + DoubleToString(entries[i].rrRatio, 1);
+      string label;
+      if(entries[i].rrRatio > 0.0)
+         label = dir + " R:R 1:" + DoubleToString(entries[i].rrRatio, 1);
+      else
+         label = dir;
       ENUM_ANCHOR_POINT anchor = isBuy ? ANCHOR_UPPER : ANCHOR_LOWER;
       DrawText(lblName, entries[i].signalTime, entries[i].entryPrice, label, clr, 8, anchor);
 
@@ -655,10 +676,13 @@ void DrawEntrySignals(EntrySignal &entries[], int entryCount)
       entries[i].objNameSL = slName;
       DrawHLine(slName, entries[i].slPrice, CLR_SL, 1, STYLE_DASH);
 
-      // TP dashed line
-      string tpName = baseName + "_tp";
-      entries[i].objNameTP = tpName;
-      DrawHLine(tpName, entries[i].tpPrice, CLR_TP, 1, STYLE_DASH);
+      // TP dashed line (only if TP exists)
+      if(entries[i].tpPrice > 0.0)
+        {
+         string tpName = baseName + "_tp";
+         entries[i].objNameTP = tpName;
+         DrawHLine(tpName, entries[i].tpPrice, CLR_TP, 1, STYLE_DASH);
+        }
      }
   }
 
@@ -724,8 +748,8 @@ void DrawAll(PriceZone          &zones[],         int zoneCount,
    //DrawLiquidityEvents(liqEvents, liqEventCount);
    //DrawEqualLevels(eqLevels, eqLevelCount);
    //DrawKeyLevels(keyLevels, keyLevelCount);
-   //DrawEntrySignals(entries, entryCount);
-   //DrawTradeState(trade);
+   DrawEntrySignals(entries, entryCount);
+   DrawTradeState(trade);
 
    ChartRedraw(0);
   }

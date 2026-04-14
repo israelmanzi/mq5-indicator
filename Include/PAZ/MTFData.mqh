@@ -34,14 +34,18 @@ bool MTFLoadAll(MTFRates &rates[], int minBars)
   {
    // Per-TF bar targets indexed to match TF_LIST: D1, H4, H1, M15
    int tfBars[4] = {200, 500, 1000, 2000};
+   int loaded = 0;
 
    for(int i = 0; i < TF_COUNT; i++)
      {
       int barsNeeded = (int)MathMax(tfBars[i], minBars);
-      if(!MTFLoadRates(rates[i], TF_LIST[i], barsNeeded))
-         return false;
+      if(MTFLoadRates(rates[i], TF_LIST[i], barsNeeded))
+         loaded++;
+      else
+         rates[i].count = 0; // mark as unavailable, don't block others
      }
-   return true;
+   // Need at least D1 + one lower TF to do anything useful
+   return (loaded >= 2 && rates[0].count > 0);
   }
 
 //-----------------------------------------------------------------------------

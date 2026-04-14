@@ -286,16 +286,28 @@ void GenerateEntrySignals(const StructureState &structure[],
   {
    datetime since = TimeCurrent() - 24 * 3600;
 
+   //--- Cleanup: remove entries older than 24h
+   for(int i = entryCount - 1; i >= 0; i--)
+     {
+      if(entries[i].signalTime < since)
+        {
+         for(int j = i; j < entryCount - 1; j++)
+            entries[j] = entries[j + 1];
+         entryCount--;
+        }
+     }
+   ArrayResize(entries, entryCount);
+
    //--- Step 1: D1 bias
    ENUM_ENTRY_DIR dir;
    if(!CheckD1Bias(structure[0], dir))
       return;
 
-   //--- Step 2: Zone alignment
-   double tolerance = _Point * 10;
+   //--- Step 2: Zone alignment (tolerance = 50 pips for 5-digit, gives room for approach)
+   double zoneTolerance = _Point * 50;
    PriceZone matchedZone;
    ZeroMemory(matchedZone);
-   if(!CheckZoneAlignment(zones, zoneCount, dir, currentPrice, tolerance, matchedZone))
+   if(!CheckZoneAlignment(zones, zoneCount, dir, currentPrice, zoneTolerance, matchedZone))
       return;
 
    //--- Step 3: Liquidity sweep
@@ -333,18 +345,10 @@ void GenerateEntrySignals(const StructureState &structure[],
    double sl = CalcSL(matchedZone, dir, buffer);
    double tp = CalcTP(dir, currentPrice, zones, zoneCount, keyLevels, keyLevelCount);
 
-   if(tp == 0.0)
-      return;
-
-   //--- Check R:R
+   //--- Calculate R:R for display (no gate — always allow entry)
    double risk   = MathAbs(currentPrice - sl);
-   double reward = MathAbs(tp - currentPrice);
-   if(risk <= 0.0)
-      return;
-
-   double rr = reward / risk;
-   if(InpMinRR > 0.0 && rr < InpMinRR)
-      return;
+   double reward = (tp > 0.0) ? MathAbs(tp - currentPrice) : 0.0;
+   double rr     = (risk > 0.0 && reward > 0.0) ? reward / risk : 0.0;
 
    //--- Dedup: skip if entry signaled within last H1
    datetime oneHourAgo = TimeCurrent() - 3600;

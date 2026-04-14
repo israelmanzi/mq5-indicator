@@ -134,6 +134,19 @@ void UpdateAllStructure(const MTFRates   &rates[],
                         StructureBreak   &breaks[],
                         int              &breakCount)
   {
+   // Cleanup: remove breaks older than 48h to prevent unbounded growth
+   datetime cutoff = TimeCurrent() - 48 * 3600;
+   for(int i = breakCount - 1; i >= 0; i--)
+     {
+      if(breaks[i].time < cutoff)
+        {
+         for(int j = i; j < breakCount - 1; j++)
+            breaks[j] = breaks[j + 1];
+         breakCount--;
+        }
+     }
+   if(breakCount >= 0) ArrayResize(breaks, breakCount);
+
    for(int i = 0; i < TF_COUNT; i++)
      {
       // 1. Update trend classification
